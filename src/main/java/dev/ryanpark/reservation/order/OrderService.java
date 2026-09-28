@@ -18,11 +18,13 @@ public class OrderService {
     private final ReservationRepository orders;
     private final Clock clock;
     private final Duration ttl;
+    private final dev.ryanpark.reservation.events.OutboxRecorder events;
 
     public OrderService(ProductRepository products, ReservationRepository orders, Clock clock,
-                        @Value("${app.reservation-ttl:PT15M}") Duration ttl) {
+                        @Value("${app.reservation-ttl:PT15M}") Duration ttl,
+                        dev.ryanpark.reservation.events.OutboxRecorder events) {
         if (ttl.isNegative() || ttl.isZero()) throw new IllegalArgumentException("Reservation TTL must be positive");
-        this.products = products; this.orders = orders; this.clock = clock; this.ttl = ttl;
+        this.products = products; this.orders = orders; this.clock = clock; this.ttl = ttl; this.events = events;
     }
     /** Internal convenience. HTTP clients must supply a stable idempotency key. */
     @Transactional
@@ -40,7 +42,9 @@ public class OrderService {
         if (existing.isPresent()) return replay(existing.get(), request);
         product.reserve(request.quantity());
         var now = clock.instant();
-        return OrderView.from(orders.saveAndFlush(new Reservation(owner, key, product, request.quantity(), now, now.plus(ttl))));
+        var order = orders.saveAndFlush(new Reservation(owner, key, product, request.quantity(), now, now.plus(ttl)));
+        events.record(order);
+        return OrderView.from(order);
     }
     static void validate(String owner, String key, ReserveRequest request) {
         if (owner == null || owner.isBlank() || owner.length() > 100) throw ApiException.invalid("Invalid owner");
@@ -88,6 +92,7 @@ public class OrderService {
         if (target == OrderStatus.CONFIRMED) product.confirm(order.quantity());
         else product.release(order.quantity());
         order.transitionTo(target);
+        events.record(order);
         return OrderView.from(order);
     }
 }

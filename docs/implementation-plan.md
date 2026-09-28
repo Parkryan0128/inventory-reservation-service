@@ -34,3 +34,5 @@ Stage 1: `mvn test` passed 2 tests on Java 21 with H2. Application startup, Flyw
 Stage 2: `mvn test` passed 8 tests. With H2, 120 concurrent one-unit requests against 25 items produced exactly 25 reservations. Insufficient stock, negative quantity, transaction rollback, price snapshot and ownership checks passed. This is application-level concurrency evidence, not the pending PostgreSQL gate.
 
 Stage 3: `mvn test` passed 18 tests. Thirty concurrent retries produced one order. Conflicting payloads and cross-product key races preserved inventory. Repeated callbacks, cancellation/payment races, expiry/payment races and late payment were exercised.
+
+Stage 4: `mvn test` passed 27 tests. A real embedded KRaft Kafka broker delivered reservation and confirmation events; replay created no duplicate audit receipt. Relay retry/backoff, competing publishers, transactional rollback and concurrent consumer deduplication passed. The consumer records audit receipts, not shipping or payment effects.
