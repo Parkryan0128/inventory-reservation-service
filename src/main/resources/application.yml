@@ -29,17 +29,40 @@ spring:
       enable-auto-commit: false
     listener:
       ack-mode: record
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      connect-timeout: 200ms
+      timeout: 200ms
+      repositories:
+        enabled: false
   flyway:
     enabled: true
 server:
+  servlet:
+    session:
+      timeout: 20m
+      cookie:
+        http-only: true
+        same-site: strict
   error:
     include-message: never
 management:
+  health:
+    redis:
+      enabled: ${CACHE_ENABLED:false}
   endpoints:
     web:
       exposure:
         include: health,info
 app:
+  security:
+    alice-password: ${ALICE_PASSWORD}
+    bob-password: ${BOB_PASSWORD}
+    admin-password: ${ADMIN_PASSWORD}
+  cache:
+    enabled: ${CACHE_ENABLED:false}
   events:
     enabled: ${EVENTS_ENABLED:false}
     topic: orders.v1

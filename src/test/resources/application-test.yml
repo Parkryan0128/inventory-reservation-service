@@ -10,5 +10,9 @@ logging:
   level:
     root: WARN
 app:
+  security:
+    alice-password: test-alice-password
+    bob-password: test-bob-password
+    admin-password: test-admin-password
   scheduling:
     enabled: false

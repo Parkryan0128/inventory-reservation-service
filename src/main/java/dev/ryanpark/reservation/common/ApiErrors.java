@@ -8,6 +8,24 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 @RestControllerAdvice
 public class ApiErrors {
+    @ExceptionHandler({org.springframework.http.converter.HttpMessageNotReadableException.class,
+            org.springframework.web.bind.MissingRequestHeaderException.class,
+            org.springframework.web.method.annotation.MethodArgumentTypeMismatchException.class,
+            jakarta.validation.ConstraintViolationException.class})
+    ProblemDetail invalid(Exception exception) {
+        var problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Invalid request payload, parameter or header");
+        problem.setProperty("code", "INVALID_REQUEST"); return problem;
+    }
+    @ExceptionHandler(org.springframework.dao.DataIntegrityViolationException.class)
+    ProblemDetail conflict(Exception exception) {
+        var problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "Request conflicts with existing data");
+        problem.setProperty("code", "DATA_CONFLICT"); return problem;
+    }
+    @ExceptionHandler(org.springframework.dao.PessimisticLockingFailureException.class)
+    ProblemDetail contention(Exception exception) {
+        var problem = ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, "Resource is busy; retry with the same idempotency key");
+        problem.setProperty("code", "RETRY_LATER"); return problem;
+    }
     @ExceptionHandler(ApiException.class)
     ProblemDetail handle(ApiException exception) {
         var problem = ProblemDetail.forStatusAndDetail(exception.status(), exception.getMessage());
