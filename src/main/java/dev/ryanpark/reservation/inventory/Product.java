@@ -36,6 +36,15 @@ public class Product {
         reserved += quantity;
     }
 
+    public void release(int quantity) {
+        checkReserved(quantity); reserved -= quantity; available += quantity;
+    }
+    public void confirm(int quantity) {
+        checkReserved(quantity); reserved -= quantity; sold += quantity;
+    }
+    private void checkReserved(int quantity) {
+        if (quantity < 1 || reserved < quantity) throw new IllegalStateException("Invalid inventory transition");
+    }
     public UUID id() { return id; }
     public String sku() { return sku; }
     public String name() { return name; }

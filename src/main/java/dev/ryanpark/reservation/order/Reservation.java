@@ -17,12 +17,20 @@ public class Reservation {
     @Enumerated(EnumType.STRING) @Column(length = 24) private OrderStatus status;
     private Instant createdAt;
     private Instant expiresAt;
+    @Column(nullable = false, length = 80) private String idempotencyKey;
+    private int revision;
 
     protected Reservation() {}
-    Reservation(String owner, Product product, int quantity, Instant now, Instant expiresAt) {
+    Reservation(String owner, String key, Product product, int quantity, Instant now, Instant expiresAt) {
         this.id = UUID.randomUUID(); this.ownerId = owner; this.productId = product.id();
         this.quantity = quantity; this.unitPriceCents = product.priceCents(); this.currency = product.currency();
         this.status = OrderStatus.RESERVED; this.createdAt = now; this.expiresAt = expiresAt;
+        this.idempotencyKey = key; this.revision = 1;
+    }
+    void transitionTo(OrderStatus target) {
+        if (status != OrderStatus.RESERVED || target == OrderStatus.RESERVED)
+            throw new IllegalStateException("Invalid order transition");
+        status = target; revision++;
     }
     public UUID id() { return id; }
     public String ownerId() { return ownerId; }
@@ -33,4 +41,6 @@ public class Reservation {
     public OrderStatus status() { return status; }
     public Instant createdAt() { return createdAt; }
     public Instant expiresAt() { return expiresAt; }
+    public String idempotencyKey() { return idempotencyKey; }
+    public int revision() { return revision; }
 }
