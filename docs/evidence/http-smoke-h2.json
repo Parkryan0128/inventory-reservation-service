@@ -1,0 +1,17 @@
+{
+  "result": "PASS",
+  "productId": "5b76017f-e379-4231-be5e-e0a3e4634160",
+  "orderId": "4916cfec-3545-4be6-945a-4cd9e27a1bfd",
+  "stock": {
+    "id": "5b76017f-e379-4231-be5e-e0a3e4634160",
+    "sku": "SMOKE-50A1682B67CF42D7A8C93B17A52C0B05",
+    "name": "Smoke widget",
+    "priceCents": 750,
+    "currency": "USD",
+    "available": 1,
+    "reserved": 0,
+    "sold": 2,
+    "initialStock": 3
+  },
+  "eventsChecked": false
+}

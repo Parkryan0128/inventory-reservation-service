@@ -26,7 +26,8 @@ public class KafkaEventConfiguration {
         return (UUID order, String payload) -> kafka.send(topic, order.toString(), payload).get(5, TimeUnit.SECONDS);
     }
     @Bean DefaultErrorHandler kafkaErrorHandler(KafkaTemplate<String, String> kafka) {
-        var recoverer = new DeadLetterPublishingRecoverer(kafka);
+        var recoverer = new DeadLetterPublishingRecoverer(kafka, (record, exception) ->
+                new org.apache.kafka.common.TopicPartition(record.topic() + ".DLT", record.partition()));
         recoverer.setFailIfSendResultIsError(true);
         return new DefaultErrorHandler(recoverer, new FixedBackOff(1000, 2));
     }

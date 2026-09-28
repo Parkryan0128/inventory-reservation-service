@@ -1,0 +1,7 @@
+# docker compose -f compose.yml -f compose.events.yml --profile events up --build
+services:
+  app:
+    environment:
+      EVENTS_ENABLED: "true"
+    depends_on:
+      kafka: {condition: service_healthy}

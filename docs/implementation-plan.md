@@ -2,7 +2,7 @@
 
 ## Scope
 
-Build a modular monolith with a separate optional event-processing role. A reservation contains one product and quantity. Payments are simulated; no real card data or money is handled. PostgreSQL owns inventory and order correctness. Redis never authorizes a reservation. Kafka delivery is at least once, not exactly once.
+Build a modular monolith with an optional in-process event pipeline. A reservation contains one product and quantity. Payments are simulated; no real card data or money is handled. PostgreSQL owns inventory and order correctness. Redis never authorizes a reservation. Kafka delivery is at least once, not exactly once.
 
 ## Stages
 
@@ -38,3 +38,5 @@ Stage 3: `mvn test` passed 18 tests. Thirty concurrent retries produced one orde
 Stage 4: `mvn test` passed 27 tests. A real embedded KRaft Kafka broker delivered reservation and confirmation events; replay created no duplicate audit receipt. Relay retry/backoff, competing publishers, transactional rollback and concurrent consumer deduplication passed. The consumer records audit receipts, not shipping or payment effects.
 
 Stage 5: all 38 application/API tests passed. The Redis integration suite then passed 3 tests using an actual Redis 7.0.15 process: metadata/TTL, expiration, and catalog fallback after stopping Redis. Customer/admin authorization, CSRF, invalid passwords and cross-user access were verified. The initial Redis harness deadlocked while awaiting asynchronous work in a class initializer; polling on the initializing thread fixed the harness. PostgreSQL and container deployment remain separate gates.
+
+Stage 6: built the interactive demo, HTTP smoke/contention clients, Compose stack, CI gates, architecture/API/interview documentation and PostgreSQL acceptance subclasses. Final local verification passed 41 application/HTTP/Kafka tests and 3 real Redis tests. A running H2-backed HTTP server accepted exactly 25 of 120 competing requests for 25 units. The poison-event test caught and fixed the DLT destination mismatch. PostgreSQL and Docker/Compose execution require the configured Docker-capable CI gate and are not claimed complete; see `validation.md`.

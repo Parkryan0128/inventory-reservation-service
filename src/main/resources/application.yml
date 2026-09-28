@@ -1,6 +1,10 @@
 spring:
   application:
     name: inventory-reservation-service
+  task:
+    scheduling:
+      pool:
+        size: 2
   datasource:
     url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/reservations}
     username: ${DATABASE_USER:reservations}
@@ -51,11 +55,12 @@ server:
 management:
   health:
     redis:
-      enabled: ${CACHE_ENABLED:false}
+      # Redis is optional; cache failures must not remove a healthy API from service.
+      enabled: false
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,prometheus
 app:
   security:
     alice-password: ${ALICE_PASSWORD}

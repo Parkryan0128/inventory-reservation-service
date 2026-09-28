@@ -1,0 +1,40 @@
+name: Acceptance
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Unit, HTTP, Kafka, PostgreSQL and Redis acceptance
+        run: ./mvnw -B -ntp verify
+      - name: Validate Compose configuration and image build
+        run: |
+          docker compose -f compose.yml -f compose.events.yml --profile events config --quiet
+          docker compose build app
+      - name: End-to-end Compose smoke
+        run: |
+          docker compose -f compose.yml -f compose.events.yml --profile events up -d
+          python3 scripts/smoke.py --wait 150 --require-events
+          python3 scripts/contention.py --requests 120 --stock 25 --workers 16
+      - name: Logs
+        if: failure()
+        run: docker compose -f compose.yml -f compose.events.yml --profile events logs --no-color
+      - name: Stop services
+        if: always()
+        run: docker compose -f compose.yml -f compose.events.yml --profile events down -v
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-reports
+          path: |
+            target/surefire-reports/
+            target/failsafe-reports/
+            target/site/jacoco/

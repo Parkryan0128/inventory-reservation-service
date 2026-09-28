@@ -1,0 +1,7 @@
+# Explicit local-only credentials. Never use this profile for an Internet-facing service.
+app:
+  security:
+    alice-password: ${ALICE_PASSWORD:demo-alice-password}
+    bob-password: ${BOB_PASSWORD:demo-bob-password}
+    admin-password: ${ADMIN_PASSWORD:demo-admin-password}
+  reservation-ttl: ${RESERVATION_TTL:PT2M}

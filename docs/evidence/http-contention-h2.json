@@ -1,0 +1,24 @@
+{
+  "requests": 120,
+  "workers": 16,
+  "httpStatuses": {
+    "201": 25,
+    "409": 95
+  },
+  "elapsedSeconds": 1.834,
+  "requestsPerSecond": 65.44,
+  "p50Ms": 208.35,
+  "p95Ms": 481.61,
+  "stock": {
+    "id": "5a4b322a-7be9-4c0b-b4d6-2c023cef9a74",
+    "sku": "LOAD-FCCD66D913A84308908388EAB7742B1C",
+    "name": "Contention widget",
+    "priceCents": 100,
+    "currency": "USD",
+    "available": 0,
+    "reserved": 25,
+    "sold": 0,
+    "initialStock": 25
+  },
+  "passed": true
+}
