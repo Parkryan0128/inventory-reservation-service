@@ -10,8 +10,14 @@ import org.springframework.scheduling.annotation.Scheduled;
 @EnableScheduling
 @ConditionalOnProperty(name = "app.scheduling.enabled", havingValue = "true", matchIfMissing = true)
 public class ScheduledTasks {
-    private final ReservationExpiry expiry;
-    public ScheduledTasks(ReservationExpiry expiry) { this.expiry = expiry; }
-    @Scheduled(fixedDelayString = "${app.expiry-interval-ms:5000}")
-    public void expireReservations() { expiry.expireDue(); }
+  private final ReservationExpiry expiry;
+
+  public ScheduledTasks(ReservationExpiry expiry) {
+    this.expiry = expiry;
+  }
+
+  @Scheduled(fixedDelayString = "${app.expiry-interval-ms:5000}")
+  public void expireReservations() {
+    expiry.expireDue();
+  }
 }
