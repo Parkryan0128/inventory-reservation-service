@@ -30,3 +30,5 @@ Fast tests use H2 in PostgreSQL mode to exercise application behavior. They are 
 ## Evidence
 
 Stage 1: `mvn test` passed 2 tests on Java 21 with H2. Application startup, Flyway migration and the inventory balance CHECK constraint passed. PostgreSQL remains an explicit integration gate.
+
+Stage 2: `mvn test` passed 8 tests. With H2, 120 concurrent one-unit requests against 25 items produced exactly 25 reservations. Insufficient stock, negative quantity, transaction rollback, price snapshot and ownership checks passed. This is application-level concurrency evidence, not the pending PostgreSQL gate.
