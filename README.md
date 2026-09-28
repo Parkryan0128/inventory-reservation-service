@@ -2,7 +2,7 @@
 
 An inventory reservation service built with Java 21 and Spring Boot.
 
-It uses PostgreSQL transactions to reserve stock, handles repeated requests with idempotency keys, and delivers order events through a transactional outbox.
+PostgreSQL handles stock and order transactions. Redis caches product metadata, and Kafka delivers order events through a transactional outbox.
 
 [Architecture](docs/architecture.md) · [API documentation](docs/api.md)
 
@@ -18,116 +18,70 @@ stateDiagram-v2
     RESERVED --> EXPIRED: Reservation expires
 ```
 
-The service:
+A reservation locks the product row and saves the stock change, order, and outbox event in one transaction. Retrying with the same customer, idempotency key, and payload returns the existing order.
 
-1. Identifies the customer through Spring Security and checks order ownership.
-2. Uses the customer and idempotency key to identify repeated requests.
-3. Locks the product row before reserving stock.
-4. Saves the reservation, stock changes, and outbox event in one transaction.
-5. Confirms or releases reserved stock when the order is paid, cancelled, or expired.
-6. Publishes outbox events to Kafka and retries failed deliveries.
-7. Records audit events and deduplicates them by event ID.
-8. Caches product metadata in Redis while keeping inventory and order prices in PostgreSQL.
+Payment, cancellation, and expiry share a locked transition so stock changes only once. The database enforces `available + reserved + sold = initial_stock`.
 
-Stock always satisfies `available + reserved + sold = initial_stock`. Payment, cancellation, and expiry use the same locked transition so inventory changes only once.
+The Kafka relay retries failed deliveries, and the consumer deduplicates audit events. Redis is used only for metadata; inventory and order prices come from PostgreSQL.
 
-Each order reserves one product. Payments are simulated, and the demo uses three configured accounts.
+Each order contains one product. Payments are simulated.
 
 ## Project structure
 
 | Path | Contents |
 | --- | --- |
-| `src/main/java/` | Inventory, orders, security, cache, and event processing |
+| `src/main/java/` | Inventory, orders, security, cache, and events |
 | `src/main/resources/` | Configuration, database migrations, and demo UI |
-| `src/test/` | Unit, integration, concurrency, and browser tests |
+| `src/test/` | Java, JavaScript, and browser tests |
 | `scripts/` | HTTP smoke and contention checks |
 | `docs/` | Architecture, API reference, and validation results |
 
 ## Build
 
-Requirements:
-
-- Docker with Compose v2
-- Java 21 for Java tests; Maven is provided by the wrapper
-- Node.js 22 or newer for JavaScript and browser tests
-- Python 3 for HTTP checks
-
-Build and start the demo:
+Requires Docker with Compose v2.
 
 ```bash
 docker compose up --build
 ```
 
-Open [localhost:8080](http://localhost:8080).
+Open [localhost:8080](http://localhost:8080). Use `admin` to create products and simulate payments, or `alice` and `bob` to reserve stock and view their own orders.
 
-| Account | Password | Access |
-| --- | --- | --- |
-| `alice` | `demo-alice-password` | Catalog and own orders |
-| `bob` | `demo-bob-password` | Catalog and own orders |
-| `admin` | `demo-admin-password` | Product creation, all orders, and simulated payments |
+| Local account | Password |
+| --- | --- |
+| `alice` | `demo-alice-password` |
+| `bob` | `demo-bob-password` |
+| `admin` | `demo-admin-password` |
 
-Create a product as `admin`, switch to `alice`, and reserve it. Replay the request to get the same order ID. Switch back to `admin` to confirm or fail payment. Unpaid demo reservations expire after 2 minutes.
+The demo is bound to localhost, and unpaid reservations expire after 2 minutes. Configuration overrides are in [.env.example](.env.example).
 
-These passwords are for local use. Compose binds the app to `127.0.0.1`; database and broker ports remain private. Configuration overrides are listed in [.env.example](.env.example).
-
-Start with Kafka event delivery enabled:
+To enable Kafka delivery:
 
 ```bash
 docker compose -f compose.yml -f compose.events.yml --profile events up --build
 ```
 
-Without Kafka, orders and outbox events are still saved. Pending events are delivered when the relay is enabled.
-
-Stop the stack without deleting its data:
-
-```bash
-docker compose -f compose.yml -f compose.events.yml --profile events down
-```
-
 ## Tests
 
-Run application tests and JavaScript session tests:
+Java tests require Java 21; JavaScript tests require Node.js 22 or newer.
 
 ```bash
-./mvnw test
-npm test
+./mvnw test      # Application tests and embedded Kafka
+./mvnw verify    # Also runs PostgreSQL and Redis tests; requires Docker
+npm test        # Demo session tests
 ```
 
-Run PostgreSQL and Redis integration tests with Docker:
-
-```bash
-./mvnw verify
-```
-
-Run browser tests against the running demo:
-
-```bash
-npm ci
-npx playwright install --with-deps chromium
-npm run test:browser
-```
-
-The suite covers stock contention, repeated requests, competing order transitions, Kafka delivery, Redis outages, authentication, and account switching.
-
-[CI passed 87 tests](https://github.com/Parkryan0128/inventory-reservation-service/actions/runs/36465926585). See [validation results](docs/validation.md) for the environments and recorded outputs.
+Tests cover concurrent reservations, retries, order transitions, event delivery, cache outages, and access control. Browser setup and recorded results are in [validation results](docs/validation.md).
 
 ## Concurrency checks
 
-Run an HTTP smoke check against the local demo:
+With the demo running and Python 3 installed:
 
 ```bash
 python3 scripts/smoke.py
-```
-
-Send competing requests for limited stock:
-
-```bash
 python3 scripts/contention.py --requests 120 --stock 25 --workers 16
 ```
 
-The script creates a product, checks the final inventory, and reports response counts and latency. The recorded CI run accepted 25 reservations and rejected the other 95 with insufficient stock.
-
-To check Kafka delivery as well, run the smoke script with `--require-events` against the Kafka-enabled stack.
+The recorded CI run accepted 25 reservations and rejected the remaining 95 with insufficient stock. The script checks the final inventory and reports response counts and latency.
 
 ## Contact
 
