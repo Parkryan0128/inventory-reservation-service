@@ -4,7 +4,7 @@ A Java 21 / Spring Boot backend for limited inventory: reserve stock without ove
 
 **Stack:** Java 21 · Spring Boot 3.5 · Spring Security · JPA/Hibernate · PostgreSQL · Flyway · Redis · Kafka · Micrometer/Prometheus · JUnit 5 · Testcontainers · Docker Compose · GitHub Actions.
 
-**Verified:** 70 automated tests plus a complete PostgreSQL/Redis/Kafka Compose smoke and HTTP contention check passed in [GitHub Actions](https://github.com/Parkryan0128/inventory-reservation-service/actions/runs/36461635023). See [validation evidence](docs/validation.md).
+**Verified:** 87 automated tests, including real browser journeys, plus PostgreSQL/Redis/Kafka Compose smoke and HTTP contention checks passed in [GitHub Actions](https://github.com/Parkryan0128/inventory-reservation-service/actions/runs/36465926585). See [validation evidence](docs/validation.md).
 
 ## Run the demo
 
