@@ -112,3 +112,11 @@ test("an HTML proxy error produces a readable message rather than a JSON parse e
     /502 · Server returned a non-JSON response/,
   );
 });
+
+test("the browser fetch receiver is preserved when sending a request", async () => {
+  const session = new Session("alice", "password", function () {
+    if (this !== globalThis) throw new TypeError("Illegal invocation");
+    return Promise.resolve(json({ username: "alice" }));
+  });
+  assert.equal((await session.request("/api/me")).username, "alice");
+});

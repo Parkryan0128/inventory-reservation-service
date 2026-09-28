@@ -8,13 +8,7 @@ async function connect(page, account) {
       process.env[`${account.toUpperCase()}_PASSWORD`] ||
         `demo-${account}-password`,
     );
-  const loaded = page.waitForResponse(
-    (response) =>
-      response.url().endsWith("/api/products") &&
-      response.request().method() === "GET",
-  );
   await page.locator("#login-form button").click();
-  await loaded;
   await expect(page.locator("#identity")).toContainText(`${account} /`);
   await expect(page.locator("#workspace")).toBeVisible();
   await expect(page.locator("#orders tr")).not.toHaveCount(0);

@@ -24,7 +24,8 @@ export class Session {
   constructor(username, password, fetchRequest = globalThis.fetch) {
     const credentials = new TextEncoder().encode(`${username}:${password}`);
     this.#authorization = "Basic " + btoa(String.fromCharCode(...credentials));
-    this.#fetch = fetchRequest;
+    // Native browser fetch requires Window as its receiver.
+    this.#fetch = fetchRequest.bind(globalThis);
   }
 
   get isAdmin() {
