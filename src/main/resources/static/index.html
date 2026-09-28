@@ -1,27 +1,226 @@
 <!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Reserve / Inventory Lab</title>
-  <link rel="stylesheet" href="/styles.css"><script src="/app.js" defer></script>
-</head>
-<body>
-<header><a class="brand" href="/">reserve<span>/</span></a><span class="eyebrow">INVENTORY LAB</span><span id="identity" class="identity">Disconnected</span><button id="disconnect" class="subtle" hidden>Disconnect</button></header>
-<main>
-  <section class="intro"><div><p class="eyebrow">ONE UNIT. ONE RESERVATION.</p><h1>Watch the stock.<br>Trust the transaction.</h1><p class="lead">Reserve limited inventory, replay a request, and settle an order.<br>A working lab for concurrency and reliable event delivery.</p></div><div class="principle"><span>THE INVARIANT</span><strong>available + reserved + sold</strong><small>always equals initial stock</small></div></section>
-  <div id="notice" class="notice" role="status" aria-live="polite">Connect with a configured demo account to begin.</div>
-  <section id="login-section" class="panel login"><div><h2>Connect to the lab</h2><p>Use the account passwords configured on the server. Local demo defaults are in the README.</p></div><form id="login-form"><label>Account<select id="account"><option>alice</option><option>bob</option><option>admin</option></select></label><label>Password<input id="password" type="password" required autocomplete="current-password"></label><button type="submit">Connect →</button></form></section>
-  <div id="workspace" hidden>
-    <section class="toolbar"><h2>Inventory overview</h2><div><span class="muted">Refreshes every 5 seconds · first 50 products</span> <button id="refresh" class="subtle">Refresh</button></div></section>
-    <div class="grid">
-      <section class="panel"><div id="products" class="products"></div></section>
-      <section class="panel reserve"><p class="eyebrow">01 / RESERVE</p><h2>Hold your inventory.</h2><form id="reserve-form"><label>Product<select id="product" required></select></label><p id="metadata" class="muted"></p><label>Quantity<input id="quantity" type="number" min="1" max="10000" value="1" required></label><label>Idempotency key<input id="request-key" maxlength="80" required pattern="[A-Za-z0-9._:\-]+"></label><p class="hint">Same account + key + payload returns the same order. A changed payload returns 409.</p><div class="actions"><button type="submit">Reserve stock</button><button id="new-key" type="button" class="subtle">New key</button></div></form><button id="replay" class="text-button" disabled>↻ Replay last request</button></section>
-    </div>
-    <section class="panel orders"><div class="section-title"><div><p class="eyebrow">02 / FOLLOW THE LIFECYCLE</p><h2>Orders</h2></div><span id="orders-caption" class="muted">Your latest 50 orders</span></div><div class="table-wrap"><table><thead><tr><th>Order / owner</th><th>Quantity</th><th>Total</th><th>Status</th><th>Expires</th><th>Actions</th></tr></thead><tbody id="orders"></tbody></table></div></section>
-    <section id="admin" class="grid" hidden><div class="panel"><p class="eyebrow">ADMIN / CATALOG</p><h2>Create a test product.</h2><form id="product-form" class="create-form"><label>SKU<input id="sku" required pattern="[A-Z0-9_-]{1,64}" maxlength="64"></label><label>Name<input id="name" value="Limited edition widget" required maxlength="160"></label><label>Price (cents)<input id="price" type="number" min="1" max="1000000000" value="2500" required></label><label>Initial stock<input id="stock" type="number" min="0" max="1000000" value="10" required></label><label>Currency<select id="currency"><option>USD</option><option>CAD</option></select></label><button type="submit">Create product</button></form></div><div class="panel"><p class="eyebrow">ADMIN / EVENT DELIVERY</p><h2>Outbox → Kafka → audit</h2><div id="events"></div><p class="hint">Audit receipts are durable, deduplicated event records. Payments here are simulated. No money is charged.</p></div></section>
-    <details class="panel response" open><summary>Last API response</summary><pre id="response">No request yet.</pre></details>
-  </div>
-  <footer>Java 21 · Spring Boot · PostgreSQL · Redis · Kafka <span>Demo payments only. No card data.</span></footer>
-</main>
-</body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Inventory Reservations</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <script src="/app.js" type="module"></script>
+  </head>
+  <body>
+    <header>
+      <a class="brand" href="/">reservations</a>
+      <span class="eyebrow">DEMO</span>
+      <span id="identity" class="identity">Disconnected</span>
+      <button id="disconnect" class="subtle" hidden>Disconnect</button>
+    </header>
+    <main>
+      <section class="intro">
+        <div>
+          <p class="eyebrow">INVENTORY RESERVATIONS</p>
+          <h1>
+            Reserve stock.
+            <br />
+            Track each order.
+          </h1>
+          <p class="lead">
+            Create a product, reserve a quantity, and confirm or cancel the
+            order. Replay a request to check that stock is only reserved once.
+          </p>
+        </div>
+        <div class="principle">
+          <span>STOCK BALANCE</span>
+          <strong>available + reserved + sold</strong>
+          <small>always equals initial stock</small>
+        </div>
+      </section>
+      <div id="notice" class="notice" role="status" aria-live="polite">
+        Connect with a configured demo account to begin.
+      </div>
+      <section id="login-section" class="panel login">
+        <div>
+          <h2>Connect to the demo</h2>
+          <p>
+            Use the account passwords configured on the server. Local demo
+            defaults are in the README.
+          </p>
+        </div>
+        <form id="login-form">
+          <label>
+            Account
+            <select id="account">
+              <option>alice</option>
+              <option>bob</option>
+              <option>admin</option>
+            </select>
+          </label>
+          <label>
+            Password
+            <input
+              id="password"
+              type="password"
+              required
+              autocomplete="current-password"
+            />
+          </label>
+          <button type="submit">Connect</button>
+        </form>
+      </section>
+      <div id="workspace" hidden>
+        <section class="toolbar">
+          <h2>Inventory overview</h2>
+          <div>
+            <span class="muted">
+              Refreshes every 5 seconds · first 50 products
+            </span>
+            <button id="refresh" class="subtle">Refresh</button>
+          </div>
+        </section>
+        <div class="grid">
+          <section class="panel">
+            <div id="products" class="products"></div>
+          </section>
+          <section class="panel reserve">
+            <p class="eyebrow">RESERVATION</p>
+            <h2>Reserve a product</h2>
+            <form id="reserve-form">
+              <label>
+                Product
+                <select id="product" required></select>
+              </label>
+              <p id="metadata" class="muted"></p>
+              <label>
+                Quantity
+                <input
+                  id="quantity"
+                  type="number"
+                  step="1"
+                  min="1"
+                  max="10000"
+                  value="1"
+                  required
+                />
+              </label>
+              <label>
+                Idempotency key
+                <input
+                  id="request-key"
+                  maxlength="80"
+                  required
+                  pattern="[A-Za-z0-9._:\-]+"
+                />
+              </label>
+              <p class="hint">
+                Same account + key + payload returns the same order. A changed
+                payload returns 409.
+              </p>
+              <div class="actions">
+                <button type="submit">Reserve stock</button>
+                <button id="new-key" type="button" class="subtle">
+                  New key
+                </button>
+              </div>
+            </form>
+            <button id="replay" class="text-button" disabled>
+              ↻ Replay last request
+            </button>
+          </section>
+        </div>
+        <section class="panel orders">
+          <div class="section-title">
+            <div>
+              <p class="eyebrow">RECENT ACTIVITY</p>
+              <h2>Orders</h2>
+            </div>
+            <span id="orders-caption" class="muted">Your latest 50 orders</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Order / owner</th>
+                  <th>Quantity</th>
+                  <th>Total</th>
+                  <th>Status</th>
+                  <th>Expires</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="orders"></tbody>
+            </table>
+          </div>
+        </section>
+        <section id="admin" class="grid" hidden>
+          <div class="panel">
+            <p class="eyebrow">ADMIN / CATALOG</p>
+            <h2>Create a product</h2>
+            <form id="product-form" class="create-form">
+              <label>
+                SKU
+                <input
+                  id="sku"
+                  required
+                  pattern="[A-Z0-9_-]{1,64}"
+                  maxlength="64"
+                />
+              </label>
+              <label>
+                Name
+                <input id="name" value="Demo widget" required maxlength="160" />
+              </label>
+              <label>
+                Price (cents)
+                <input
+                  id="price"
+                  type="number"
+                  step="1"
+                  min="1"
+                  max="1000000000"
+                  value="2500"
+                  required
+                />
+              </label>
+              <label>
+                Initial stock
+                <input
+                  id="stock"
+                  type="number"
+                  step="1"
+                  min="0"
+                  max="1000000"
+                  value="10"
+                  required
+                />
+              </label>
+              <label>
+                Currency
+                <select id="currency">
+                  <option>USD</option>
+                  <option>CAD</option>
+                </select>
+              </label>
+              <button type="submit">Create product</button>
+            </form>
+          </div>
+          <div class="panel">
+            <p class="eyebrow">ADMIN / EVENT DELIVERY</p>
+            <h2>Outbox → Kafka → audit</h2>
+            <div id="events"></div>
+            <p class="hint">
+              Audit receipts are durable, deduplicated event records. Payments
+              here are simulated. No money is charged.
+            </p>
+          </div>
+        </section>
+        <details class="panel response" open>
+          <summary>Last API response</summary>
+          <pre id="response">No request yet.</pre>
+        </details>
+      </div>
+      <footer>
+        Java 21 · Spring Boot · PostgreSQL · Redis · Kafka
+        <span>Demo payments only. No card data.</span>
+      </footer>
+    </main>
+  </body>
 </html>

@@ -16,4 +16,4 @@ Possible resume bullets, after reviewing the implementation and reproducing the 
 - Built a Java/Spring Boot inventory reservation service with transactional stock updates, caller-scoped idempotency, and race-safe payment/cancellation/expiry transitions.
 - Implemented a transactional outbox and Kafka audit consumer with retry/backoff, event deduplication and dead-letter handling; verified broker delivery and Redis outage fallback with integration tests.
 
-Only add numerical latency/throughput claims after recording the hardware, database, dataset, test command and raw results. AI assistance does not replace being able to explain or change the implementation.
+Only add numerical latency/throughput claims after recording the hardware, database, dataset, test command and raw results.

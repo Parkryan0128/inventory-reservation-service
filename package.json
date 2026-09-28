@@ -1,0 +1,15 @@
+{
+  "name": "inventory-reservation-demo",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test src/test/js/*.test.js",
+    "test:browser": "playwright test"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0"
+  }
+}

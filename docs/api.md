@@ -33,3 +33,7 @@ Use an existing product ID. Quantity is 1..10,000. Keys contain 1..80 characters
 Common errors: 400 `INVALID_REQUEST`; 401 `UNAUTHENTICATED`; 403 `FORBIDDEN` (including missing/invalid CSRF); 404 `NOT_FOUND`; 409 `INSUFFICIENT_STOCK`, `IDEMPOTENCY_CONFLICT`, `INVALID_TRANSITION`, or `DATA_CONFLICT`; 503 `RETRY_LATER` for translated lock contention. Error responses never include raw SQL or stack traces.
 
 For complete executable examples including cookie and CSRF handling, use `scripts/api_client.py` and `scripts/smoke.py`. The simulator and admin listing are demo tools, not a public payment-provider webhook.
+
+## JSON types
+
+Quantities, stock counts and prices in cents must be integer JSON numbers. Decimal numbers, quoted numbers, and null values are rejected with `400 INVALID_REQUEST`; the server does not truncate or coerce them. Simulated payment `success` must be a JSON boolean.

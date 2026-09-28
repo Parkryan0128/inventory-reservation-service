@@ -49,12 +49,25 @@ Read [architecture and tradeoffs](docs/architecture.md), [API contract](docs/api
 
 ## Tests
 
-Java 21 is required; Maven is provided by the wrapper.
+Java 21 is required; Maven is provided by the wrapper. The demo session tests use Node.js 22 or newer and have no npm dependencies. Browser acceptance uses Playwright against a running demo.
 
 ```bash
+npm test         # Demo session isolation, cancellation and error responses
 ./mvnw test       # H2 application/API/HTTP tests + a real embedded Kafka broker
 ./mvnw verify     # Above + PostgreSQL and Redis Testcontainers; requires Docker
 ```
+
+To run the browser journey against the Compose app:
+
+```bash
+npm ci
+npx playwright install chromium
+npm run test:browser
+```
+
+It checks product creation, reservation/replay, account isolation, payment, and a delayed response during account switching. CI runs it against the complete Compose stack.
+
+Java formatting is checked during the Maven build. Run `./mvnw spotless:apply` after editing Java; `.editorconfig` defines whitespace for the other files.
 
 `verify` intentionally **fails** when Docker is unavailable. PostgreSQL tests re-run the actual inventory, lifecycle, schema and outbox acceptance cases against PostgreSQL 16. H2 tests are not evidence of PostgreSQL locking behavior. CI also builds the application image and runs an HTTP smoke test against the complete Compose stack. See the validation document for which gates have actually run.
 

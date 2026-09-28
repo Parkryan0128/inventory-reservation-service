@@ -11,8 +11,13 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '21'
+          java-version: "21"
           cache: maven
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Demo session regression tests
+        run: npm test
       - name: Unit, HTTP, Kafka, PostgreSQL and Redis acceptance
         run: ./mvnw -B -ntp verify
       - name: Validate Compose configuration and image build
@@ -24,6 +29,11 @@ jobs:
           docker compose -f compose.yml -f compose.events.yml --profile events up -d
           python3 scripts/smoke.py --wait 150 --require-events
           python3 scripts/contention.py --requests 120 --stock 25 --workers 16
+      - name: Browser acceptance against Compose
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+          npm run test:browser
       - name: Logs
         if: failure()
         run: docker compose -f compose.yml -f compose.events.yml --profile events logs --no-color
@@ -38,3 +48,4 @@ jobs:
             target/surefire-reports/
             target/failsafe-reports/
             target/site/jacoco/
+            test-results/

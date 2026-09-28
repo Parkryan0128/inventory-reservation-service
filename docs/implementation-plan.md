@@ -27,18 +27,8 @@ Build a modular monolith with an optional in-process event pipeline. A reservati
 
 Fast tests use H2 in PostgreSQL mode to exercise application behavior. They are not proof of PostgreSQL locking semantics. The PostgreSQL acceptance suite uses Testcontainers and must run on a Docker-capable host/CI. Kafka and Redis behavior must be tested with real service implementations, not asserted from mocks alone.
 
-## Evidence
+## Acceptance results
 
-Stage 1: `mvn test` passed 2 tests on Java 21 with H2. Application startup, Flyway migration and the inventory balance CHECK constraint passed. PostgreSQL remains an explicit integration gate.
-
-Stage 2: `mvn test` passed 8 tests. With H2, 120 concurrent one-unit requests against 25 items produced exactly 25 reservations. Insufficient stock, negative quantity, transaction rollback, price snapshot and ownership checks passed. This is application-level concurrency evidence, not the pending PostgreSQL gate.
-
-Stage 3: `mvn test` passed 18 tests. Thirty concurrent retries produced one order. Conflicting payloads and cross-product key races preserved inventory. Repeated callbacks, cancellation/payment races, expiry/payment races and late payment were exercised.
-
-Stage 4: `mvn test` passed 27 tests. A real embedded KRaft Kafka broker delivered reservation and confirmation events; replay created no duplicate audit receipt. Relay retry/backoff, competing publishers, transactional rollback and concurrent consumer deduplication passed. The consumer records audit receipts, not shipping or payment effects.
-
-Stage 5: all 38 application/API tests passed. The Redis integration suite then passed 3 tests using an actual Redis 7.0.15 process: metadata/TTL, expiration, and catalog fallback after stopping Redis. Customer/admin authorization, CSRF, invalid passwords and cross-user access were verified. The initial Redis harness deadlocked while awaiting asynchronous work in a class initializer; polling on the initializing thread fixed the harness. PostgreSQL and container deployment remain separate gates.
-
-Stage 6: built the interactive demo, HTTP smoke/contention clients, Compose stack, CI gates, architecture/API/interview documentation and PostgreSQL acceptance subclasses. Final local verification passed 41 application/HTTP/Kafka tests and 3 real Redis tests. A running H2-backed HTTP server accepted exactly 25 of 120 competing requests for 25 units. The poison-event test caught and fixed the DLT destination mismatch. PostgreSQL and Docker/Compose execution require the configured Docker-capable CI gate and are not claimed complete; see `validation.md`.
-
-Remote acceptance: all six implementation stages were published as separate commits. GitHub Actions run 36461635023 passed 41 application tests, 26 PostgreSQL tests and 3 Redis tests (70 total), built the Docker image, and passed the full Compose Kafka/HTTP smoke and 120-request contention scenario. This closes the earlier local PostgreSQL/Compose gates. Detailed evidence and raw HTTP results are recorded in `validation.md`.
+The completed test runs, environment details, and HTTP results are recorded in
+[validation evidence](validation.md). Keep results there so this plan does not
+accumulate conflicting test counts or outdated completion notes.
