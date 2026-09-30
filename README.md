@@ -4,7 +4,7 @@ An inventory reservation service built with Java 21 and Spring Boot.
 
 PostgreSQL handles stock and order transactions. Redis caches product metadata, and Kafka delivers order events through a transactional outbox.
 
-[Architecture](docs/architecture.md) · [API documentation](docs/api.md)
+[One-click demo](docs/demo.md) · [Architecture](docs/architecture.md) · [API documentation](docs/api.md)
 
 ## How it works
 
@@ -30,21 +30,27 @@ Each order contains one product. Payments are simulated.
 
 | Path | Contents |
 | --- | --- |
-| `src/main/java/` | Inventory, orders, security, cache, and events |
+| `src/main/java/` | Inventory, orders, security, cache, events, and demo scenarios |
 | `src/main/resources/` | Configuration, database migrations, and demo UI |
 | `src/test/` | Java, JavaScript, and browser tests |
 | `scripts/` | HTTP smoke and contention checks |
 | `docs/` | Architecture, API reference, and validation results |
 
-## Build
+## Run the demo
 
 Requires Docker with Compose v2.
 
 ```bash
-docker compose up --build
+docker compose up --build -d
 ```
 
-Open [localhost:8080](http://localhost:8080). Use `admin` to create products and simulate payments, or `alice` and `bob` to reserve stock and view their own orders.
+Open [127.0.0.1:8080](http://127.0.0.1:8080/) and click **Run all 5 checks**. No login is needed. The page creates fresh demo products and checks concurrent reservations, idempotency, payment/cancellation/failure, competing order transitions, and expiry. Results come from real service calls and database reads, not a prerecorded animation.
+
+The main contention check submits 120 calls through 16 server worker threads for 25 units. It expects 25 reservations and 95 insufficient-stock rejections. This exercises the same transactional service as the API; it is not a benchmark of 120 simultaneous HTTP connections. The expiry check advances only its generated order's deadline to avoid waiting two minutes.
+
+The demo is bound to localhost and enabled only under the `demo` profile. Do not expose this profile publicly. Configuration overrides are in [.env.example](.env.example).
+
+The original [manual API workspace](http://127.0.0.1:8080/index.html) remains available for account/ownership testing:
 
 | Local account | Password |
 | --- | --- |
@@ -52,12 +58,12 @@ Open [localhost:8080](http://localhost:8080). Use `admin` to create products and
 | `bob` | `demo-bob-password` |
 | `admin` | `demo-admin-password` |
 
-The demo is bound to localhost, and unpaid reservations expire after 2 minutes. Configuration overrides are in [.env.example](.env.example).
+Use `admin` to create products and simulate payments, or `alice` and `bob` to reserve stock and view their own orders. Unpaid reservations expire after two minutes.
 
 To enable Kafka delivery:
 
 ```bash
-docker compose -f compose.yml -f compose.events.yml --profile events up --build
+docker compose -f compose.yml -f compose.events.yml --profile events up --build -d
 ```
 
 ## Tests
@@ -65,14 +71,14 @@ docker compose -f compose.yml -f compose.events.yml --profile events up --build
 Java tests require Java 21; JavaScript tests require Node.js 22 or newer.
 
 ```bash
-./mvnw test      # Application tests and embedded Kafka
+./mvnw test      # Application and demo tests, including embedded Kafka
 ./mvnw verify    # Also runs PostgreSQL and Redis tests; requires Docker
-npm test        # Demo session tests
+npm test        # Session and one-click orchestration tests
 ```
 
-Tests cover concurrent reservations, retries, order transitions, event delivery, cache outages, and access control. Browser setup and recorded results are in [validation results](docs/validation.md).
+Tests cover concurrent reservations, retries, order transitions, event delivery, cache outages, access control, and the no-login demo's isolation and error handling. Browser setup and recorded results are in [validation results](docs/validation.md).
 
-## Concurrency checks
+## HTTP concurrency checks
 
 With the demo running and Python 3 installed:
 

@@ -41,7 +41,7 @@ test("create, reserve, replay and confirm an order through the demo", async ({
 }) => {
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
-  await page.goto("/");
+  await page.goto("/index.html");
   await connect(page, "admin");
   const product = await createProduct(page);
   await page.locator("#disconnect").click();
@@ -92,7 +92,7 @@ test("disconnect during a poll does not populate the next account with old order
 }) => {
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
-  await page.goto("/");
+  await page.goto("/index.html");
   await connect(page, "alice");
   await expect(page.locator("#orders tr")).not.toHaveCount(0);
 

@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Inventory Reservation Lab</title>
+    <link rel="stylesheet" href="/demo.css" />
+    <script src="/demo.js" type="module"></script>
+  </head>
+  <body>
+    <header>
+      <a class="brand" href="/">reservations<span> / lab</span></a>
+      <span class="local">LOCAL DEMO</span>
+      <a href="/index.html">Manual API workspace ↗</a>
+    </header>
+    <main>
+      <section class="hero">
+        <div>
+          <p class="eyebrow">BACKEND, MADE VISIBLE</p>
+          <h1>25 items.<br />120 requests.<br /><span>No overselling.</span></h1>
+          <p class="lead">See what happens when requests compete for the same stock. One click creates fresh test data and checks the real backend. No login. No terminal juggling.</p>
+          <button id="run-all" class="primary" disabled>Run all 5 checks <span>→</span></button>
+          <p class="hint">Fixed, bounded workloads · new products each run · no real payments</p>
+        </div>
+        <aside class="explainer">
+          <p class="eyebrow">WHAT THE MAIN CHECK DOES</p>
+          <div class="flow"><strong>120</strong><span>reservation requests</span></div>
+          <p class="arrow">↓ 16 server worker threads</p>
+          <div class="flow"><strong>25</strong><span>units in the database</span></div>
+          <div class="expected"><span>Expected: 25 accepted</span><span>95 out of stock</span></div>
+          <p>These are expected values, not a recorded result. Run the check to see your actual result below.</p>
+        </aside>
+      </section>
+      <section class="run-status" aria-live="polite" aria-atomic="true">
+        <div><strong id="summary">Connecting to the local demo…</strong><p id="detail">Checking server availability.</p></div>
+        <span id="database" class="tag">Database</span>
+      </section>
+      <progress id="progress" max="5" value="0" aria-label="Completed demo checks"></progress>
+      <section id="scenarios" class="scenario-grid" aria-label="Demo checks"></section>
+      <section class="events panel">
+        <div><p class="eyebrow">EVENT DELIVERY · OBSERVATION ONLY</p><h2>Outbox → Kafka → audit</h2><p id="event-status">Loading event status…</p></div>
+        <div class="event-counts"><div><strong id="pending">—</strong><span>Pending events</span></div><div><strong id="receipts">—</strong><span>Audit receipts</span></div></div>
+        <p class="hint">Counters include all application orders. They are not an exactly-once guarantee or an extra passed check. When Kafka is disabled, events stay in the outbox.</p>
+        <details><summary>Enable Kafka delivery locally</summary><pre>docker compose -f compose.yml -f compose.events.yml --profile events up --build -d</pre><p>The five checks above work without Kafka.</p></details>
+      </section>
+      <footer>Java 21 · Spring Boot · database transactions · real stock snapshots<br />Demo endpoints exist only under the demo profile. The manual API still checks authentication and ownership.</footer>
+    </main>
+  </body>
+</html>

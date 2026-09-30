@@ -1,0 +1,85 @@
+:root { color-scheme: light; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #18332b; background: #f5f6f1; font-synthesis: none; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+a { color: inherit; text-underline-offset: 4px; }
+header { max-width: 1240px; margin: auto; padding: 26px 28px; display: flex; align-items: center; gap: 22px; border-bottom: 1px solid #d7dfd4; font-size: 13px; }
+header > a:last-child { margin-left: auto; }
+.brand { font-weight: 800; font-size: 21px; text-decoration: none; letter-spacing: -1px; }
+.brand span { font-weight: 400; color: #668071; }
+.local, .tag { font-size: 11px; font-weight: 700; padding: 7px 11px; border: 1px solid #c7d4c8; border-radius: 24px; white-space: nowrap; }
+main { max-width: 1184px; margin: auto; padding: 52px 28px 0; }
+.hero { display: grid; grid-template-columns: 1.35fr 1fr; gap: 70px; align-items: center; padding: 0 0 46px; }
+.eyebrow { color: #547460; font-size: 11px; font-weight: 800; letter-spacing: 2px; }
+h1 { margin: 20px 0; font-size: clamp(40px, 5.5vw, 68px); line-height: 1.06; letter-spacing: -3px; font-weight: 750; }
+h1 span { color: #40845b; }
+.lead { max-width: 530px; font-size: 16px; line-height: 1.75; color: #526459; }
+button { font: inherit; cursor: pointer; transition: opacity .15s; }
+button:disabled { opacity: .5; cursor: not-allowed; }
+button:focus-visible, a:focus-visible, summary:focus-visible { outline: 3px solid #658c42; outline-offset: 4px; }
+.primary { display: flex; align-items: center; gap: 48px; margin-top: 26px; border: 0; border-radius: 9px; padding: 17px 23px; background: #214c38; color: white; font-weight: 700; }
+.primary span { font-size: 23px; line-height: 1; }
+.hint { color: #617066; font-size: 12px; line-height: 1.65; }
+.explainer { background: #e8eddf; border: 1px solid #d6dfc9; border-radius: 20px; padding: 28px; }
+.flow { display: flex; align-items: center; gap: 18px; }
+.flow strong { font-size: 58px; letter-spacing: -3px; min-width: 112px; }
+.flow span { font-size: 15px; }
+.arrow { margin: 12px 0; font-size: 13px; color: #61765e; }
+.expected { display: flex; gap: 12px; flex-wrap: wrap; margin: 18px 0; font-size: 12px; font-weight: 700; }
+.expected span { background: #f8faef; border-radius: 6px; padding: 8px; }
+.explainer > p:last-child { font-size: 12px; line-height: 1.6; color: #596b55; }
+.run-status { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 20px 0 12px; }
+.run-status strong { font-size: 18px; }
+.run-status p { font-size: 13px; color: #647366; line-height: 1.6; margin: 8px 0; }
+progress { width: 100%; height: 5px; accent-color: #367548; margin: 0 0 25px; }
+.scenario-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; align-items: start; }
+.panel { background: #fff; border: 1px solid #dce3d8; border-radius: 14px; padding: 26px; min-width: 0; }
+.card-heading { display: flex; align-items: center; justify-content: space-between; }
+.number { color: #738573; font-size: 13px; font-variant-numeric: tabular-nums; }
+.badge { border-radius: 5px; background: #f0f2ed; color: #6b7668; font-size: 10px; letter-spacing: .7px; font-weight: 800; padding: 6px 8px; }
+.badge.pass { color: #20613f; background: #e4f2e8; }
+.badge.fail { color: #9d332e; background: #fae7e4; }
+.badge.running { color: #6b5916; background: #fbf1d0; }
+h2 { font-size: 21px; letter-spacing: -.5px; margin: 18px 0 10px; }
+.description { min-height: 62px; font-size: 14px; line-height: 1.65; color: #647063; }
+.secondary { border: 1px solid #b9cdbd; background: #fafcf8; color: #2a5237; padding: 10px 15px; border-radius: 7px; font-size: 12px; font-weight: 700; }
+.result:not(:empty) { border-top: 1px solid #e6eae1; margin-top: 22px; padding-top: 14px; }
+.timing { font-size: 11px; color: #71806d; }
+.outcomes { display: flex; gap: 22px; flex-wrap: wrap; margin: 18px 0; }
+.outcomes strong { font-size: 32px; letter-spacing: -1px; display: block; }
+.outcomes span { display: block; font-size: 9px; font-weight: 700; letter-spacing: .4px; color: #6a7865; }
+.table-wrap { width: 100%; overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 11px; }
+caption { text-align: left; font-size: 11px; color: #647063; padding-bottom: 9px; }
+th, td { text-align: right; border-bottom: 1px solid #edf0e8; padding: 10px 5px; font-variant-numeric: tabular-nums; }
+th { color: #6c7969; font-weight: 600; font-size: 10px; }
+th:first-child, td:first-child { text-align: left; }
+.checks { padding: 0; margin: 20px 0; list-style: none; font-size: 12px; line-height: 1.6; }
+.checks li { margin-bottom: 8px; }
+.pass-text { color: #347447; }
+.error { color: #a5342b; font-size: 12px; line-height: 1.7; }
+details { font-size: 12px; line-height: 1.6; }
+summary { cursor: pointer; color: #577153; }
+pre { background: #f5f7f0; border-radius: 7px; padding: 12px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 10px; line-height: 1.65; max-height: 340px; overflow-y: auto; }
+.events { margin-top: 24px; display: grid; grid-template-columns: 1fr auto; gap: 6px 30px; }
+.events h2 { margin-top: 10px; }
+.events p:not(.eyebrow):not(.hint) { color: #5f6f5a; font-size: 13px; line-height: 1.6; }
+.events > .hint, .events > details { grid-column: 1 / -1; }
+.event-counts { display: flex; align-items: center; gap: 32px; }
+.event-counts strong { display: block; font-size: 29px; }
+.event-counts span { font-size: 11px; color: #6e7a68; }
+footer { text-align: center; padding: 36px 0; font-size: 11px; line-height: 2; color: #77816e; }
+@media (max-width: 760px) {
+  header { flex-wrap: wrap; gap: 12px; padding: 20px; }
+  header > a:last-child { font-size: 11px; }
+  .local { display: none; }
+  main { padding: 30px 18px 0; }
+  .hero { grid-template-columns: 1fr; gap: 26px; }
+  h1 { letter-spacing: -2px; }
+  .explainer { padding: 22px; }
+  .scenario-grid { grid-template-columns: 1fr; }
+  .panel { padding: 22px 18px; }
+  .events { grid-template-columns: 1fr; }
+  .event-counts { margin: 12px 0; }
+  .tag { max-width: 105px; overflow: hidden; text-overflow: ellipsis; }
+}
+@media (prefers-reduced-motion: reduce) { button { transition: none; } }
