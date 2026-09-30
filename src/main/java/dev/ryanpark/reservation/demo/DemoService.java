@@ -189,19 +189,21 @@ public class DemoService {
                 "",
                 () -> orders.payment(paid.orderId(), true)),
             log);
-    attempt(
-        new Work(
-            requestId(2),
-            "payment",
-            "payment-success",
-            3,
-            "",
-            () -> orders.payment(paid.orderId(), true)),
-        log);
+    var confirmedAgain =
+        attempt(
+            new Work(
+                requestId(2),
+                "payment",
+                "payment-success",
+                3,
+                "",
+                () -> orders.payment(paid.orderId(), true)),
+            log);
     var afterPayment = snapshot("Confirm payment twice", product, steps, log);
     checks.put(
         "Repeated payment sells only once",
-        confirmed.code().equals("CONFIRMED") && stock(afterPayment, 9, 0, 3));
+        returnedTwice(paid.orderId(), "CONFIRMED", confirmed, confirmedAgain)
+            && stock(afterPayment, 9, 0, 3));
     var cancelled =
         attempt(
             new Work(
@@ -213,28 +215,31 @@ public class DemoService {
                 () -> orders.reserve(owner, "cancel", new ReserveRequest(product.id(), 2))),
             log);
     snapshot("Reserve 2 more units", product, steps, log);
-    attempt(
-        new Work(
-            requestId(4),
-            "customer-001",
-            "cancel",
-            2,
-            "",
-            () -> orders.cancel(owner, cancelled.orderId())),
-        log);
-    attempt(
-        new Work(
-            requestId(5),
-            "customer-001",
-            "cancel",
-            2,
-            "",
-            () -> orders.cancel(owner, cancelled.orderId())),
-        log);
+    var cancellation =
+        attempt(
+            new Work(
+                requestId(4),
+                "customer-001",
+                "cancel",
+                2,
+                "",
+                () -> orders.cancel(owner, cancelled.orderId())),
+            log);
+    var cancellationAgain =
+        attempt(
+            new Work(
+                requestId(5),
+                "customer-001",
+                "cancel",
+                2,
+                "",
+                () -> orders.cancel(owner, cancelled.orderId())),
+            log);
     var afterCancel = snapshot("Cancel twice", product, steps, log);
     checks.put(
         "Repeated cancellation restores only once",
-        orders.get(owner, cancelled.orderId()).status() == OrderStatus.CANCELLED
+        returnedTwice(cancelled.orderId(), "CANCELLED", cancellation, cancellationAgain)
+            && orders.get(owner, cancelled.orderId()).status() == OrderStatus.CANCELLED
             && stock(afterCancel, 9, 0, 3));
     var failed =
         attempt(
@@ -247,28 +252,31 @@ public class DemoService {
                 () -> orders.reserve(owner, "failure", new ReserveRequest(product.id(), 2))),
             log);
     snapshot("Reserve 2 more units", product, steps, log);
-    attempt(
-        new Work(
-            requestId(7),
-            "payment",
-            "payment-failure",
-            2,
-            "",
-            () -> orders.payment(failed.orderId(), false)),
-        log);
-    attempt(
-        new Work(
-            requestId(8),
-            "payment",
-            "payment-failure",
-            2,
-            "",
-            () -> orders.payment(failed.orderId(), false)),
-        log);
+    var paymentFailure =
+        attempt(
+            new Work(
+                requestId(7),
+                "payment",
+                "payment-failure",
+                2,
+                "",
+                () -> orders.payment(failed.orderId(), false)),
+            log);
+    var paymentFailureAgain =
+        attempt(
+            new Work(
+                requestId(8),
+                "payment",
+                "payment-failure",
+                2,
+                "",
+                () -> orders.payment(failed.orderId(), false)),
+            log);
     var afterFailure = snapshot("Fail payment twice", product, steps, log);
     checks.put(
         "Repeated payment failure restores only once",
-        orders.get(owner, failed.orderId()).status() == OrderStatus.PAYMENT_FAILED
+        returnedTwice(failed.orderId(), "PAYMENT_FAILED", paymentFailure, paymentFailureAgain)
+            && orders.get(owner, failed.orderId()).status() == OrderStatus.PAYMENT_FAILED
             && stock(afterFailure, 9, 0, 3));
     checks.put("Exactly three orders persisted", orderCount(product) == 3);
     return result(
@@ -438,6 +446,13 @@ public class DemoService {
   private boolean stock(Snapshot snapshot, int available, int reserved, int sold) {
     var p = snapshot.inventory();
     return p.available() == available && p.reserved() == reserved && p.sold() == sold;
+  }
+
+  private boolean returnedTwice(UUID orderId, String code, Attempt first, Attempt repeated) {
+    return code.equals(first.code())
+        && code.equals(repeated.code())
+        && orderId.equals(first.orderId())
+        && orderId.equals(repeated.orderId());
   }
 
   private long count(List<Attempt> attempts, String code) {
