@@ -6,7 +6,7 @@ docker compose up --build -d
 
 Open `http://127.0.0.1:8080/`. Choose a scenario and click **Run scenario**. No login, account switching or manual product setup is needed.
 
-The page has a compact product/inventory panel, scenario explanation and configuration, a terminal-style activity log, and a measured result section. The normal account-based workspace remains at `/index.html`.
+The page has a compact product/inventory panel, scenario explanation and configuration, a terminal-style activity log, and a measured result section. The normal account-based workspace remains at `/index.html`, without a dashboard footer link. Execution details are documented here instead of in a separate technical panel.
 
 ## Scenarios
 
@@ -26,7 +26,9 @@ The server returns the completed recording; the browser reveals it progressively
 
 **OK** means the service returned normally, including a PAYMENT_FAILED terminal state. **REJECT** is an expected domain conflict. **INFO** includes captured inventory and expiry no-ops. Infrastructure errors stop the run and appear as errors, not stock rejections or successful checks.
 
-Use **Pause/Resume**, **Show all**, **Replay**, speed selection, and filters to inspect the recording. These controls never submit new backend writes. Scrolling up with a mouse wheel or navigation keys turns off **Follow log**; it can also be unchecked directly. Reduced-motion preferences show the complete recording immediately.
+Use **Pause/Resume**, **Show all**, **Replay**, speed selection, and filters to inspect the recording. These controls never submit new backend writes. **Slow**, **Normal**, and **Fast** schedule rows at 200, 40, and 12 ms respectively, regardless of scenario length. Changing speed reschedules the pending row immediately; it does not restart the recording or resume a paused replay. The selected speed persists across reruns and preset switches. Actual display timing can also depend on browser scheduling. Reduced-motion preferences disable smooth scrolling, but do not bypass the selected playback speed; **Show all** remains available for immediate display.
+
+**Follow log** is checked by default on page load. Unchecking it before a run keeps automatic scrolling off. The choice persists across reruns, replay, and preset switches, and changing it during playback takes effect immediately. Scrolling up with a mouse wheel or navigation keys also turns it off. The log viewport does not use browser scroll anchoring to move the position while following is disabled.
 
 During concurrent reservation and duplicate-request playback, the product counters are explicitly labelled **Derived from replayed responses** when calculated from unique successful order IDs and quantities. They are not intermediate database reads. At a recorded snapshot, actual database values replace that calculation. Other scenarios update inventory only at recorded snapshot markers. The result table always compares actual recorded database snapshots. For payment/cancel and expiry, the first snapshot is after setup has reserved stock.
 
@@ -53,4 +55,4 @@ npm test
 npm run test:browser
 ```
 
-Java tests check real outcomes and persisted rows against H2 and PostgreSQL, including the activity sequence, order IDs, repeated transitions and expiry no-ops. JavaScript tests cover response validation, stock derivation, duplicate-order handling, paused/resumed playback, stale callback cancellation and errors. Browser tests run against Compose and verify progressive logs, order preservation, filtering, replay without writes, fresh reruns, errors, mobile layout, reduced motion and the original workspace.
+Java tests check real outcomes and persisted rows against H2 and PostgreSQL, including the activity sequence, order IDs, repeated transitions and expiry no-ops. JavaScript tests cover response validation, stock derivation, duplicate-order handling, paused/resumed playback, speed changes, stale callback cancellation and errors. Browser tests run real scenarios against Compose. Separate deterministic UI tests use fixture responses and a controlled browser clock to check all speed settings, mid-replay speed changes, pause/resume, follow preferences, and removal of unused UI sections. Browser coverage also includes filtering, replay without writes, fresh reruns, errors, mobile layout, reduced-motion behavior and the original workspace.

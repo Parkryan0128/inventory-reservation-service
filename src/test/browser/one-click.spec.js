@@ -15,7 +15,7 @@ async function execute(page, name) {
   const pending = responseFor(page, name);
   await page.locator("#run").click();
   const result = await (await pending).json();
-  await expect(page.locator("#phase")).toHaveText("Completed", { timeout: 30000 });
+  await expect(page.locator("#playback-state")).toHaveText("Recording complete", { timeout: 30000 });
   return result;
 }
 
@@ -87,7 +87,7 @@ test("replay and filtering send no writes; rerunning creates a fresh product", a
   await expect(page.locator(".log-line:visible")).toHaveCount(2);
   await page.locator("#filter").selectOption("all");
   await page.locator("#replay").click();
-  await expect(page.locator("#phase")).toHaveText("Completed");
+  await expect(page.locator("#playback-state")).toHaveText("Recording complete");
   await expect(page.locator(".log-line")).toHaveCount(102);
   expect(writes).toHaveLength(1);
   const second = await execute(page, "contention");
@@ -104,7 +104,7 @@ test("switching presets cancels replay and reload never shows stale results", as
   await page.locator('[data-scenario="expiry"]').click();
   await page.waitForTimeout(300);
   await expect(page.locator(".log-line")).toHaveCount(0);
-  await expect(page.locator("#phase")).toHaveText("Ready");
+  await expect(page.locator("#playback-state")).toHaveText("No recording");
   await expect(page.locator("#result")).toBeHidden();
   await page.reload();
   await expect(page.locator("#run")).toBeEnabled();
@@ -154,14 +154,21 @@ test("mobile terminal scrolls internally and original account workspace still wo
   await execute(page, "lifecycle");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: test.info().outputPath("terminal-mobile.png"), fullPage: true });
-  await page.getByRole("link", { name: "Manual API workspace" }).click();
+  await page.goto("/index.html");
   await expect(page.locator("#login-form")).toBeVisible();
 });
 
-test("reduced-motion preference shows all recorded results without playback", async ({ page }) => {
+test("reduced-motion preference does not override the selected speed or show-all control", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await ready(page);
-  await execute(page, "contention");
+  await page.locator("#speed").selectOption("slow");
+  const pending = responseFor(page, "contention");
+  await page.locator("#run").click();
+  await pending;
+  await expect.poll(() => page.locator(".log-line").count()).toBeGreaterThan(0);
+  expect(await page.locator(".log-line").count()).toBeLessThan(102);
+  await expect(page.locator("#playback-state")).toHaveText("Replaying recorded results");
+  await page.locator("#skip").click();
   await expect(page.locator(".log-line")).toHaveCount(102);
   await expect(page.locator("#pause")).toBeDisabled();
   await expect(page.locator("#verification")).toHaveText("Checks passed");
