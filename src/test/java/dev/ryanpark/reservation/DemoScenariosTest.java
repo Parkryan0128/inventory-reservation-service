@@ -42,13 +42,13 @@ class DemoScenariosTest {
     for (var result : List.of(first, second)) {
       assertThat(result.passed()).isTrue();
       assertThat(result.outcomes())
-          .containsOnly(entry("RESERVED", 25L), entry("INSUFFICIENT_STOCK", 95L));
+          .containsOnly(entry("RESERVED", 5L), entry("INSUFFICIENT_STOCK", 95L));
       var last = result.snapshots().getLast().inventory();
-      assertThat(List.of(last.available(), last.reserved(), last.sold())).containsExactly(0, 25, 0);
+      assertThat(List.of(last.available(), last.reserved(), last.sold())).containsExactly(0, 5, 0);
       assertThat(
               jdbc.queryForObject(
                   "SELECT COUNT(*) FROM reservations WHERE product_id = ?", Long.class, last.id()))
-          .isEqualTo(25);
+          .isEqualTo(5);
     }
     assertThat(first.snapshots().getFirst().inventory().id())
         .isNotEqualTo(second.snapshots().getFirst().inventory().id());
@@ -172,6 +172,64 @@ class DemoScenariosTest {
     for (var path :
         List.of("/demo.html", "/demo.js", "/demo-client.js", "/demo.css", "/index.html")) {
       mvc.perform(get(path)).andExpect(status().isOk());
+    }
+  }
+
+  @Test
+  void requestRecordsMatchOutcomesAndActualDatabaseRows() throws Exception {
+    for (var scenario : List.of("contention", "idempotency", "race")) {
+      var result = demo.run(scenario);
+      assertThat(result.passed()).isTrue();
+      var expectedSize =
+          switch (scenario) {
+            case "contention" -> 100;
+            case "idempotency" -> 17;
+            default -> 2;
+          };
+      assertThat(result.attempts()).hasSize(expectedSize);
+      assertThat(result.attempts())
+          .allSatisfy(attempt -> assertThat(attempt.durationMs()).isNotNegative());
+      var histogram =
+          result.attempts().stream()
+              .collect(
+                  java.util.stream.Collectors.groupingBy(
+                      DemoService.Attempt::code, java.util.stream.Collectors.counting()));
+      assertThat(histogram).isEqualTo(result.outcomes());
+      var productId = result.snapshots().getLast().inventory().id();
+      var persisted =
+          jdbc.queryForList(
+              "SELECT id FROM reservations WHERE product_id = ?", UUID.class, productId);
+      assertThat(result.persistedOrders()).isEqualTo(persisted.size());
+      var returned =
+          result.attempts().stream()
+              .map(DemoService.Attempt::orderId)
+              .filter(java.util.Objects::nonNull)
+              .distinct()
+              .toList();
+      assertThat(returned).containsExactlyInAnyOrderElementsOf(persisted);
+      assertThat(java.time.Instant.parse(result.completedAt())).isNotNull();
+      if (scenario.equals("contention")) {
+        assertThat(
+                jdbc.queryForObject(
+                    "SELECT COUNT(DISTINCT owner_id) FROM reservations WHERE product_id = ?",
+                    Long.class,
+                    productId))
+            .isEqualTo(5);
+      }
+      if (scenario.equals("race")) {
+        assertThat(result.attempts().get(0).code()).isIn("CONFIRMED", "INVALID_TRANSITION");
+        assertThat(result.attempts().get(1).code()).isIn("CANCELLED", "INVALID_TRANSITION");
+      }
+    }
+  }
+
+  @Test
+  void sequentialScenariosExposeSnapshotsWithoutInventedRequestRecords() throws Exception {
+    for (var scenario : List.of("lifecycle", "expiry")) {
+      var result = demo.run(scenario);
+      assertThat(result.attempts()).isEmpty();
+      assertThat(result.persistedOrders()).isEqualTo(scenario.equals("lifecycle") ? 3 : 1);
+      assertThat(result.snapshots()).isNotEmpty();
     }
   }
 }

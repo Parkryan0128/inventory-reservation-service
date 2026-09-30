@@ -70,35 +70,37 @@ public class DemoService {
   }
 
   private Result contention(long started) throws Exception {
-    var product = product("contention", 25);
+    var product = product("contention", 5);
     var owner = owner(product);
     var steps = new ArrayList<Snapshot>();
     steps.add(snapshot("Before requests", product));
     var calls =
-        IntStream.range(0, 120)
+        IntStream.range(0, 100)
             .<Callable<OrderView>>mapToObj(
                 index ->
                     () ->
                         orders.reserve(
-                            owner, "request-" + index, new ReserveRequest(product.id(), 1)))
+                            owner + "-" + index,
+                            "request-" + index,
+                            new ReserveRequest(product.id(), 1)))
             .toList();
     var attempts = parallel(16, calls);
-    var after = snapshot("After 120 requests", product);
+    var after = snapshot("After 100 requests", product);
     steps.add(after);
     var checks = new LinkedHashMap<String, Boolean>();
-    checks.put("Exactly 25 reservations accepted", count(attempts, "RESERVED") == 25);
+    checks.put("Exactly 5 reservations accepted", count(attempts, "RESERVED") == 5);
     checks.put(
         "Exactly 95 requests rejected for insufficient stock",
         count(attempts, "INSUFFICIENT_STOCK") == 95);
-    checks.put("Exactly 25 order rows persisted", orderCount(product) == 25);
-    checks.put("No overselling", stock(after, 0, 25, 0));
+    checks.put("Exactly 5 order rows persisted", orderCount(product) == 5);
+    checks.put("No overselling", stock(after, 0, 5, 0));
     return result(
         "contention",
         started,
         attempts,
         steps,
         checks,
-        "120 service calls on 16 server worker threads, not 120 simultaneous connections. Each call uses the real transactional reservation service and database row lock.");
+        "100 reservation calls for 100 distinct generated customers on 16 server worker threads, not 100 simultaneous HTTP connections. Each call uses the real transactional reservation service and database row lock.");
   }
 
   private Result idempotency(long started) throws Exception {
@@ -249,8 +251,8 @@ public class DemoService {
     return catalog.create(
         new CreateProduct(
             "DEMO-" + UUID.randomUUID().toString().toUpperCase(Locale.ROOT),
-            "Demo: " + name,
-            2500,
+            "Vector One",
+            89900,
             "CAD",
             stock));
   }
@@ -278,12 +280,17 @@ public class DemoService {
   }
 
   private Attempt attempt(Callable<OrderView> call) throws Exception {
+    long started = System.nanoTime();
     try {
       var order = call.call();
-      return new Attempt(order.status().name(), order.id());
+      return new Attempt(
+          order.status().name(),
+          order.id(),
+          TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started));
     } catch (ApiException ex) {
       if (ex.status().value() != 409) throw ex;
-      return new Attempt(ex.code(), null);
+      return new Attempt(
+          ex.code(), null, TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started));
     }
   }
 
@@ -345,12 +352,15 @@ public class DemoService {
         outcomes,
         List.copyOf(steps),
         checks,
-        note);
+        note,
+        List.copyOf(attempts),
+        orderCount(steps.getLast().inventory()),
+        clock.instant().toString());
   }
 
   public record Snapshot(String label, ProductView inventory) {}
 
-  private record Attempt(String code, UUID orderId) {}
+  public record Attempt(String code, UUID orderId, long durationMs) {}
 
   public record Result(
       String scenario,
@@ -359,5 +369,8 @@ public class DemoService {
       Map<String, Long> outcomes,
       List<Snapshot> snapshots,
       Map<String, Boolean> checks,
-      String note) {}
+      String note,
+      List<Attempt> attempts,
+      long persistedOrders,
+      String completedAt) {}
 }
