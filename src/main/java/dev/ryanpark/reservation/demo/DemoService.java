@@ -75,20 +75,38 @@ public class DemoService {
     var owner = owner(product);
     var steps = new ArrayList<Snapshot>();
     snapshot("Before requests", product, steps, log);
-    var calls = IntStream.range(0, 100).mapToObj(index -> new Work(
-        requestId(index), "customer-" + String.format(Locale.ROOT, "%03d", index + 1),
-        "reserve", 1, "request-" + index,
-        () -> orders.reserve(owner + "-" + index, "request-" + index,
-            new ReserveRequest(product.id(), 1)))).toList();
+    var calls =
+        IntStream.range(0, 100)
+            .mapToObj(
+                index ->
+                    new Work(
+                        requestId(index),
+                        "customer-" + String.format(Locale.ROOT, "%03d", index + 1),
+                        "reserve",
+                        1,
+                        "request-" + index,
+                        () ->
+                            orders.reserve(
+                                owner + "-" + index,
+                                "request-" + index,
+                                new ReserveRequest(product.id(), 1))))
+            .toList();
     var attempts = parallel(16, calls, log);
     var after = snapshot("After 100 requests", product, steps, log);
     var checks = new LinkedHashMap<String, Boolean>();
     checks.put("Exactly 5 reservations accepted", count(attempts, "RESERVED") == 5);
-    checks.put("Exactly 95 requests rejected for insufficient stock",
+    checks.put(
+        "Exactly 95 requests rejected for insufficient stock",
         count(attempts, "INSUFFICIENT_STOCK") == 95);
     checks.put("Exactly 5 order rows persisted", orderCount(product) == 5);
     checks.put("No overselling", stock(after, 0, 5, 0));
-    return result("contention", started, attempts, steps, checks, log,
+    return result(
+        "contention",
+        started,
+        attempts,
+        steps,
+        checks,
+        log,
         "100 reservation service calls, 100 generated customers, 16 server workers. Workers record results after the transactional service returns. Log order is observation order, not guaranteed database commit order. These are not 100 HTTP connections.");
   }
 
@@ -98,24 +116,49 @@ public class DemoService {
     var request = new ReserveRequest(product.id(), 3);
     var steps = new ArrayList<Snapshot>();
     snapshot("Before retries", product, steps, log);
-    var calls = IntStream.range(0, 16).mapToObj(index -> new Work(
-        requestId(index), "customer-001", "reserve", 3, "same-key",
-        () -> orders.reserve(owner, "same-key", request))).toList();
+    var calls =
+        IntStream.range(0, 16)
+            .mapToObj(
+                index ->
+                    new Work(
+                        requestId(index),
+                        "customer-001",
+                        "reserve",
+                        3,
+                        "same-key",
+                        () -> orders.reserve(owner, "same-key", request)))
+            .toList();
     var attempts = new ArrayList<>(parallel(16, calls, log));
     var after = snapshot("After 16 identical requests", product, steps, log);
     var checks = new LinkedHashMap<String, Boolean>();
     checks.put("All 16 retries return a reservation", count(attempts, "RESERVED") == 16);
-    checks.put("All retries return the same order ID",
+    checks.put(
+        "All retries return the same order ID",
         attempts.stream().map(Attempt::orderId).distinct().count() == 1);
     checks.put("Stock reserved only once", stock(after, 7, 3, 0) && orderCount(product) == 1);
-    var conflict = attempt(new Work(requestId(16), "customer-001", "reserve", 4, "same-key",
-        () -> orders.reserve(owner, "same-key", new ReserveRequest(product.id(), 4))), log);
+    var conflict =
+        attempt(
+            new Work(
+                requestId(16),
+                "customer-001",
+                "reserve",
+                4,
+                "same-key",
+                () -> orders.reserve(owner, "same-key", new ReserveRequest(product.id(), 4))),
+            log);
     attempts.add(conflict);
     checks.put("Changed payload is rejected", conflict.code().equals("IDEMPOTENCY_CONFLICT"));
     var finalStock = snapshot("After rejected payload change", product, steps, log);
-    checks.put("Rejected retry leaves stock unchanged",
+    checks.put(
+        "Rejected retry leaves stock unchanged",
         stock(finalStock, 7, 3, 0) && orderCount(product) == 1);
-    return result("idempotency", started, attempts, steps, checks, log,
+    return result(
+        "idempotency",
+        started,
+        attempts,
+        steps,
+        checks,
+        log,
         "16 identical calls use the same owner, key and quantity. One final call reuses the key with quantity 4. A returned order ID can appear many times without creating additional orders.");
   }
 
@@ -125,107 +168,250 @@ public class DemoService {
     var steps = new ArrayList<Snapshot>();
     var checks = new LinkedHashMap<String, Boolean>();
     snapshot("Initial stock", product, steps, log);
-    var paid = attempt(new Work(requestId(0), "customer-001", "reserve", 3, "purchase",
-        () -> orders.reserve(owner, "purchase", new ReserveRequest(product.id(), 3))), log);
+    var paid =
+        attempt(
+            new Work(
+                requestId(0),
+                "customer-001",
+                "reserve",
+                3,
+                "purchase",
+                () -> orders.reserve(owner, "purchase", new ReserveRequest(product.id(), 3))),
+            log);
     snapshot("Reserve 3 units", product, steps, log);
-    var confirmed = attempt(new Work(requestId(1), "payment", "payment-success", 3, "",
-        () -> orders.payment(paid.orderId(), true)), log);
-    attempt(new Work(requestId(2), "payment", "payment-success", 3, "",
-        () -> orders.payment(paid.orderId(), true)), log);
+    var confirmed =
+        attempt(
+            new Work(
+                requestId(1),
+                "payment",
+                "payment-success",
+                3,
+                "",
+                () -> orders.payment(paid.orderId(), true)),
+            log);
+    attempt(
+        new Work(
+            requestId(2),
+            "payment",
+            "payment-success",
+            3,
+            "",
+            () -> orders.payment(paid.orderId(), true)),
+        log);
     var afterPayment = snapshot("Confirm payment twice", product, steps, log);
-    checks.put("Repeated payment sells only once",
+    checks.put(
+        "Repeated payment sells only once",
         confirmed.code().equals("CONFIRMED") && stock(afterPayment, 9, 0, 3));
-    var cancelled = attempt(new Work(requestId(3), "customer-001", "reserve", 2, "cancel",
-        () -> orders.reserve(owner, "cancel", new ReserveRequest(product.id(), 2))), log);
+    var cancelled =
+        attempt(
+            new Work(
+                requestId(3),
+                "customer-001",
+                "reserve",
+                2,
+                "cancel",
+                () -> orders.reserve(owner, "cancel", new ReserveRequest(product.id(), 2))),
+            log);
     snapshot("Reserve 2 more units", product, steps, log);
-    attempt(new Work(requestId(4), "customer-001", "cancel", 2, "",
-        () -> orders.cancel(owner, cancelled.orderId())), log);
-    attempt(new Work(requestId(5), "customer-001", "cancel", 2, "",
-        () -> orders.cancel(owner, cancelled.orderId())), log);
+    attempt(
+        new Work(
+            requestId(4),
+            "customer-001",
+            "cancel",
+            2,
+            "",
+            () -> orders.cancel(owner, cancelled.orderId())),
+        log);
+    attempt(
+        new Work(
+            requestId(5),
+            "customer-001",
+            "cancel",
+            2,
+            "",
+            () -> orders.cancel(owner, cancelled.orderId())),
+        log);
     var afterCancel = snapshot("Cancel twice", product, steps, log);
-    checks.put("Repeated cancellation restores only once",
+    checks.put(
+        "Repeated cancellation restores only once",
         orders.get(owner, cancelled.orderId()).status() == OrderStatus.CANCELLED
             && stock(afterCancel, 9, 0, 3));
-    var failed = attempt(new Work(requestId(6), "customer-001", "reserve", 2, "failure",
-        () -> orders.reserve(owner, "failure", new ReserveRequest(product.id(), 2))), log);
+    var failed =
+        attempt(
+            new Work(
+                requestId(6),
+                "customer-001",
+                "reserve",
+                2,
+                "failure",
+                () -> orders.reserve(owner, "failure", new ReserveRequest(product.id(), 2))),
+            log);
     snapshot("Reserve 2 more units", product, steps, log);
-    attempt(new Work(requestId(7), "payment", "payment-failure", 2, "",
-        () -> orders.payment(failed.orderId(), false)), log);
-    attempt(new Work(requestId(8), "payment", "payment-failure", 2, "",
-        () -> orders.payment(failed.orderId(), false)), log);
+    attempt(
+        new Work(
+            requestId(7),
+            "payment",
+            "payment-failure",
+            2,
+            "",
+            () -> orders.payment(failed.orderId(), false)),
+        log);
+    attempt(
+        new Work(
+            requestId(8),
+            "payment",
+            "payment-failure",
+            2,
+            "",
+            () -> orders.payment(failed.orderId(), false)),
+        log);
     var afterFailure = snapshot("Fail payment twice", product, steps, log);
-    checks.put("Repeated payment failure restores only once",
+    checks.put(
+        "Repeated payment failure restores only once",
         orders.get(owner, failed.orderId()).status() == OrderStatus.PAYMENT_FAILED
             && stock(afterFailure, 9, 0, 3));
     checks.put("Exactly three orders persisted", orderCount(product) == 3);
-    return result("lifecycle", started, List.of(), steps, checks, log,
+    return result(
+        "lifecycle",
+        started,
+        List.of(),
+        steps,
+        checks,
+        log,
         "Three orders use one isolated demo owner. Payment success, cancellation and payment failure are each called twice. No real payment is made. Stock snapshots are read from the database.");
   }
 
   private Result race(long started, DemoActivityLog log) throws Exception {
     var product = product(1);
     var owner = owner(product);
-    var reservation = attempt(new Work("setup", "customer-001", "reserve", 1, "race",
-        () -> orders.reserve(owner, "race", new ReserveRequest(product.id(), 1))), log);
+    var reservation =
+        attempt(
+            new Work(
+                "setup",
+                "customer-001",
+                "reserve",
+                1,
+                "race",
+                () -> orders.reserve(owner, "race", new ReserveRequest(product.id(), 1))),
+            log);
     var steps = new ArrayList<Snapshot>();
     snapshot("One reserved unit", product, steps, log);
-    var attempts = parallel(2, List.of(
-        new Work(requestId(0), "payment", "payment-success", 1, "",
-            () -> orders.payment(reservation.orderId(), true)),
-        new Work(requestId(1), "customer-001", "cancel", 1, "",
-            () -> orders.cancel(owner, reservation.orderId()))), log);
+    var attempts =
+        parallel(
+            2,
+            List.of(
+                new Work(
+                    requestId(0),
+                    "payment",
+                    "payment-success",
+                    1,
+                    "",
+                    () -> orders.payment(reservation.orderId(), true)),
+                new Work(
+                    requestId(1),
+                    "customer-001",
+                    "cancel",
+                    1,
+                    "",
+                    () -> orders.cancel(owner, reservation.orderId()))),
+            log);
     var after = snapshot("After payment / cancellation race", product, steps, log);
     var finalOrder = orders.get(owner, reservation.orderId());
     var checks = new LinkedHashMap<String, Boolean>();
-    checks.put("Exactly one transition wins",
+    checks.put(
+        "Exactly one transition wins",
         count(attempts, "CONFIRMED") + count(attempts, "CANCELLED") == 1);
     checks.put("Losing transition is rejected", count(attempts, "INVALID_TRANSITION") == 1);
-    checks.put("Stock matches the winning transition",
+    checks.put(
+        "Stock matches the winning transition",
         (finalOrder.status() == OrderStatus.CONFIRMED && stock(after, 0, 0, 1))
             || (finalOrder.status() == OrderStatus.CANCELLED && stock(after, 1, 0, 0)));
-    return result("race", started, attempts, steps, checks, log,
+    return result(
+        "race",
+        started,
+        attempts,
+        steps,
+        checks,
+        log,
         "Setup reserves one unit. Two worker threads then call payment and cancellation against that same order. Either outcome is valid. Activity is recorded after each service call returns; the UI does not invent lock-acquisition events.");
   }
 
   private Result expiry(long started, DemoActivityLog log) throws Exception {
     var product = product(5);
     var owner = owner(product);
-    var reservation = attempt(new Work("setup", "customer-001", "reserve", 2, "expiry",
-        () -> orders.reserve(owner, "expiry", new ReserveRequest(product.id(), 2))), log);
+    var reservation =
+        attempt(
+            new Work(
+                "setup",
+                "customer-001",
+                "reserve",
+                2,
+                "expiry",
+                () -> orders.reserve(owner, "expiry", new ReserveRequest(product.id(), 2))),
+            log);
     var steps = new ArrayList<Snapshot>();
     snapshot("Two units reserved", product, steps, log);
     var checks = new LinkedHashMap<String, Boolean>();
-    checks.put("An unexpired order is not expired early",
+    checks.put(
+        "An unexpired order is not expired early",
         !expire("expiry-001", reservation.orderId(), log));
     long fixtureStart = System.nanoTime();
-    int updated = jdbc.update(
-        "UPDATE reservations SET expires_at = ? WHERE id = ? AND owner_id = ? AND status = 'RESERVED'",
-        Timestamp.from(clock.instant().minusSeconds(1)), reservation.orderId(), owner);
-    log.record("fixture", "demo", "advance-deadline", updated == 1 ? "DEADLINE_ADVANCED" : "NO_CHANGE",
-        reservation.orderId(), 0, "", elapsed(fixtureStart));
+    int updated =
+        jdbc.update(
+            "UPDATE reservations SET expires_at = ? WHERE id = ? AND owner_id = ? AND status = 'RESERVED'",
+            Timestamp.from(clock.instant().minusSeconds(1)),
+            reservation.orderId(),
+            owner);
+    log.record(
+        "fixture",
+        "demo",
+        "advance-deadline",
+        updated == 1 ? "DEADLINE_ADVANCED" : "NO_CHANGE",
+        reservation.orderId(),
+        0,
+        "",
+        elapsed(fixtureStart));
     expire("expiry-002", reservation.orderId(), log);
     checks.put("Only this generated order's deadline is advanced", updated == 1);
-    checks.put("Order reaches EXPIRED",
+    checks.put(
+        "Order reaches EXPIRED",
         orders.get(owner, reservation.orderId()).status() == OrderStatus.EXPIRED);
     checks.put("Repeating expiry is a no-op", !expire("expiry-003", reservation.orderId(), log));
     var after = snapshot("After expiry and retry", product, steps, log);
     checks.put("All reserved units returned exactly once", stock(after, 5, 0, 0));
-    return result("expiry", started, List.of(), steps, checks, log,
+    return result(
+        "expiry",
+        started,
+        List.of(),
+        steps,
+        checks,
+        log,
         "The demo advances only its generated order's deadline, then invokes the normal expiry service. This skips the two-minute wait; it is not a live scheduler trace. NO_CHANGE is the expiry service returning false.");
   }
 
   private boolean expire(String requestId, UUID id, DemoActivityLog log) {
     long started = System.nanoTime();
     boolean expired = orders.expire(id);
-    log.record(requestId, "expiry-service", "expire", expired ? "EXPIRED" : "NO_CHANGE",
-        id, 2, "", elapsed(started));
+    log.record(
+        requestId,
+        "expiry-service",
+        "expire",
+        expired ? "EXPIRED" : "NO_CHANGE",
+        id,
+        2,
+        "",
+        elapsed(started));
     return expired;
   }
 
   private ProductView product(int stock) {
-    return catalog.create(new CreateProduct(
-        "DEMO-" + UUID.randomUUID().toString().toUpperCase(Locale.ROOT),
-        "Vector One", 89900, "CAD", stock));
+    return catalog.create(
+        new CreateProduct(
+            "DEMO-" + UUID.randomUUID().toString().toUpperCase(Locale.ROOT),
+            "Vector One",
+            89900,
+            "CAD",
+            stock));
   }
 
   private String owner(ProductView product) {
@@ -241,7 +427,8 @@ public class DemoService {
         "SELECT COUNT(*) FROM reservations WHERE product_id = ?", Long.class, product.id());
   }
 
-  private Snapshot snapshot(String label, ProductView product, List<Snapshot> steps, DemoActivityLog log) {
+  private Snapshot snapshot(
+      String label, ProductView product, List<Snapshot> steps, DemoActivityLog log) {
     var step = new Snapshot(label, catalog.get(product.id()));
     steps.add(step);
     log.snapshot(steps.size() - 1);
@@ -271,23 +458,33 @@ public class DemoService {
       if (ex.status().value() != 409) throw ex;
       result = new Attempt(ex.code(), null, elapsed(started));
     }
-    log.record(work.requestId(), work.actor(), work.operation(), result.code(), result.orderId(),
-        work.quantity(), work.key(), result.durationMs());
+    log.record(
+        work.requestId(),
+        work.actor(),
+        work.operation(),
+        result.code(),
+        result.orderId(),
+        work.quantity(),
+        work.key(),
+        result.durationMs());
     return result;
   }
 
-  private List<Attempt> parallel(int workers, List<Work> calls, DemoActivityLog log) throws Exception {
+  private List<Attempt> parallel(int workers, List<Work> calls, DemoActivityLog log)
+      throws Exception {
     var ready = new CountDownLatch(Math.min(workers, calls.size()));
     var start = new CountDownLatch(1);
     var futures = new ArrayList<Future<Attempt>>();
     try (var pool = Executors.newFixedThreadPool(workers)) {
       try {
         for (var call : calls) {
-          futures.add(pool.submit(() -> {
-            ready.countDown();
-            start.await();
-            return attempt(call, log);
-          }));
+          futures.add(
+              pool.submit(
+                  () -> {
+                    ready.countDown();
+                    start.await();
+                    return attempt(call, log);
+                  }));
         }
         if (!ready.await(10, TimeUnit.SECONDS))
           throw new IllegalStateException("Demo workers did not start");
@@ -305,29 +502,63 @@ public class DemoService {
     }
   }
 
-  private Result result(String scenario, long started, List<Attempt> attempts, List<Snapshot> steps,
-      LinkedHashMap<String, Boolean> checks, DemoActivityLog log, String note) {
-    checks.put("Stock stays non-negative and balanced at every snapshot",
-        steps.stream().allMatch(step -> {
-          var p = step.inventory();
-          return p.available() >= 0 && p.reserved() >= 0 && p.sold() >= 0
-              && p.available() + p.reserved() + p.sold() == p.initialStock();
-        }));
+  private Result result(
+      String scenario,
+      long started,
+      List<Attempt> attempts,
+      List<Snapshot> steps,
+      LinkedHashMap<String, Boolean> checks,
+      DemoActivityLog log,
+      String note) {
+    checks.put(
+        "Stock stays non-negative and balanced at every snapshot",
+        steps.stream()
+            .allMatch(
+                step -> {
+                  var p = step.inventory();
+                  return p.available() >= 0
+                      && p.reserved() >= 0
+                      && p.sold() >= 0
+                      && p.available() + p.reserved() + p.sold() == p.initialStock();
+                }));
     var outcomes = new LinkedHashMap<String, Long>();
     for (var attempt : attempts) outcomes.merge(attempt.code(), 1L, Long::sum);
-    return new Result(scenario, checks.values().stream().allMatch(Boolean::booleanValue),
-        elapsed(started), outcomes, List.copyOf(steps), checks, note, List.copyOf(attempts),
-        orderCount(steps.getLast().inventory()), clock.instant().toString(), log.entries());
+    return new Result(
+        scenario,
+        checks.values().stream().allMatch(Boolean::booleanValue),
+        elapsed(started),
+        outcomes,
+        List.copyOf(steps),
+        checks,
+        note,
+        List.copyOf(attempts),
+        orderCount(steps.getLast().inventory()),
+        clock.instant().toString(),
+        log.entries());
   }
 
-  private record Work(String requestId, String actor, String operation, int quantity, String key,
+  private record Work(
+      String requestId,
+      String actor,
+      String operation,
+      int quantity,
+      String key,
       Callable<OrderView> call) {}
 
   public record Snapshot(String label, ProductView inventory) {}
 
   public record Attempt(String code, UUID orderId, long durationMs) {}
 
-  public record Result(String scenario, boolean passed, long durationMs, Map<String, Long> outcomes,
-      List<Snapshot> snapshots, Map<String, Boolean> checks, String note, List<Attempt> attempts,
-      long persistedOrders, String completedAt, List<DemoActivityLog.Entry> activity) {}
+  public record Result(
+      String scenario,
+      boolean passed,
+      long durationMs,
+      Map<String, Long> outcomes,
+      List<Snapshot> snapshots,
+      Map<String, Boolean> checks,
+      String note,
+      List<Attempt> attempts,
+      long persistedOrders,
+      String completedAt,
+      List<DemoActivityLog.Entry> activity) {}
 }

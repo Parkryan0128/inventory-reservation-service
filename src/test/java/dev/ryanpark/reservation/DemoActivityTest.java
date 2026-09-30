@@ -26,8 +26,9 @@ class DemoActivityTest {
       var result = demo.run(scenario);
       assertThat(result.passed()).isTrue();
       var productId = result.snapshots().getFirst().inventory().id();
-      var persisted = jdbc.queryForList(
-          "SELECT id FROM reservations WHERE product_id = ?", UUID.class, productId);
+      var persisted =
+          jdbc.queryForList(
+              "SELECT id FROM reservations WHERE product_id = ?", UUID.class, productId);
       int snapshot = 0;
       int requestCount = 0;
       for (int index = 0; index < result.activity().size(); index++) {
@@ -78,10 +79,14 @@ class DemoActivityTest {
       assertThat(entries.getFirst().orderId()).isEqualTo(entries.getLast().orderId());
     }
     var expiry = demo.run("expiry");
-    assertThat(expiry.activity().stream().filter(e -> e.operation().equals("expire")).map(e -> e.code()))
+    assertThat(
+            expiry.activity().stream()
+                .filter(e -> e.operation().equals("expire"))
+                .map(e -> e.code()))
         .containsExactly("NO_CHANGE", "EXPIRED", "NO_CHANGE");
     assertThat(expiry.activity().stream().filter(e -> e.operation().equals("advance-deadline")))
-        .singleElement().satisfies(e -> assertThat(e.code()).isEqualTo("DEADLINE_ADVANCED"));
+        .singleElement()
+        .satisfies(e -> assertThat(e.code()).isEqualTo("DEADLINE_ADVANCED"));
   }
 
   @Test
@@ -91,6 +96,7 @@ class DemoActivityTest {
     assertThat(first.activity()).hasSize(5);
     assertThat(second.activity()).hasSize(5);
     assertThat(second.activity().getFirst().sequence()).isEqualTo(1);
-    assertThat(first.activity().getFirst().orderId()).isNotEqualTo(second.activity().getFirst().orderId());
+    assertThat(first.activity().getFirst().orderId())
+        .isNotEqualTo(second.activity().getFirst().orderId());
   }
 }

@@ -19,19 +19,26 @@ class DemoActivityLogTest {
     var log = new DemoActivityLog(Clock.fixed(now, ZoneOffset.UTC));
     var recorded = new CountDownLatch(1);
     try (var workers = Executors.newFixedThreadPool(2)) {
-      var first = workers.submit(() -> {
-        if (!recorded.await(5, TimeUnit.SECONDS)) throw new IllegalStateException("Timed out");
-        log.record("req-001", "customer-001", "reserve", "RESERVED", null, 1, "a", 5);
-        return null;
-      });
-      var second = workers.submit(() -> {
-        log.record("req-099", "customer-099", "reserve", "INSUFFICIENT_STOCK", null, 1, "b", 2);
-        recorded.countDown();
-      });
+      var first =
+          workers.submit(
+              () -> {
+                if (!recorded.await(5, TimeUnit.SECONDS))
+                  throw new IllegalStateException("Timed out");
+                log.record("req-001", "customer-001", "reserve", "RESERVED", null, 1, "a", 5);
+                return null;
+              });
+      var second =
+          workers.submit(
+              () -> {
+                log.record(
+                    "req-099", "customer-099", "reserve", "INSUFFICIENT_STOCK", null, 1, "b", 2);
+                recorded.countDown();
+              });
       second.get(5, TimeUnit.SECONDS);
       first.get(5, TimeUnit.SECONDS);
     }
-    assertThat(log.entries()).extracting(DemoActivityLog.Entry::requestId)
+    assertThat(log.entries())
+        .extracting(DemoActivityLog.Entry::requestId)
         .containsExactly("req-099", "req-001");
     assertThat(log.entries()).extracting(DemoActivityLog.Entry::sequence).containsExactly(1, 2);
     assertThat(log.entries()).allSatisfy(e -> assertThat(e.recordedAt()).isEqualTo(now.toString()));
