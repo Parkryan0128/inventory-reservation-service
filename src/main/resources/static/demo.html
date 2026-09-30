@@ -18,25 +18,28 @@
       <h2 id="workflow-title">Purchase flow</h2>
       <div class="workflow-path">
         <div class="workflow-step">
-          <strong>1. Customer clicks Buy</strong>
+          <h3>1. Customer clicks Buy</h3>
           <p>The service checks whether the requested quantity is available.</p>
         </div>
         <div class="workflow-step">
-          <strong>2. Stock is reserved</strong>
+          <h3>2. Stock is reserved</h3>
           <p>If available, an order becomes <code>RESERVED</code>. Its units are held for 2 minutes by default while the customer pays.</p>
         </div>
-        <div class="workflow-outcomes" aria-label="Reservation outcomes">
-          <div><span>Payment succeeds</span><span><code>CONFIRMED</code><small>Held stock becomes sold stock.</small></span></div>
-          <div><span>Cancel / payment fails</span><span><code>CANCELLED / PAYMENT_FAILED</code><small>Held stock becomes available again.</small></span></div>
-          <div><span>Unpaid at the deadline</span><span><code>EXPIRED</code><small>The expiry worker releases the held stock.</small></span></div>
+        <div class="workflow-step">
+          <h3>3. Reservation ends</h3>
+          <div class="workflow-outcomes" aria-label="Reservation outcomes">
+            <div class="outcome"><div class="outcome-line"><span>Payment succeeds →</span><code>CONFIRMED</code></div><small>Reserved stock moves to sold.</small></div>
+            <div class="outcome"><div class="outcome-line"><span>Cancel / payment fails →</span><code>CANCELLED / PAYMENT_FAILED</code></div><small>Reserved stock returns to available.</small></div>
+            <div class="outcome"><div class="outcome-line"><span>Unpaid at the deadline →</span><code>EXPIRED</code></div><small>The expiry worker returns stock to available.</small></div>
+          </div>
         </div>
       </div>
     </section>
 
     <div class="dashboard">
-      <aside class="sidebar">
-        <nav class="scenario-nav panel" aria-label="Scenarios">
-          <h2>Scenarios</h2>
+      <aside class="sidebar panel">
+        <h2 class="sidebar-heading">Scenarios</h2>
+        <nav class="scenario-nav" aria-label="Scenarios">
           <button type="button" data-scenario="contention" aria-pressed="true">Concurrent reservations</button>
           <button type="button" data-scenario="idempotency" aria-pressed="false">Duplicate requests</button>
           <button type="button" data-scenario="race" aria-pressed="false">Payment vs cancel</button>
@@ -44,61 +47,55 @@
           <button type="button" data-scenario="expiry" aria-pressed="false">Reservation expiry</button>
         </nav>
 
-        <section class="scenario panel" aria-labelledby="scenario-title">
+        <section class="scenario" aria-labelledby="scenario-title">
           <h2 id="scenario-title">Concurrent reservations</h2>
           <p id="description" class="scenario-description"></p>
           <div class="scenario-copy">
             <h3>In the backend</h3>
             <p id="mechanism"></p>
           </div>
-          <div class="scenario-copy expected">
-            <h3>Look for in the log</h3>
-            <p id="expected"></p>
-          </div>
           <button type="button" id="run" class="primary" disabled>Run scenario</button>
-        </section>
-
-        <section class="inventory panel" aria-label="Inventory">
-          <div class="stock">
-            <div><span>Available</span><strong id="available">5</strong></div>
-            <div><span>Reserved</span><strong id="reserved">0</strong></div>
-            <div><span>Sold</span><strong id="sold">0</strong></div>
-          </div>
-          <p id="stock-caption" class="stock-caption">Preset stock</p>
         </section>
       </aside>
 
-      <section class="main-column">
-        <section class="terminal" aria-labelledby="activity-title">
-          <div class="terminal-header">
-            <h2 id="activity-title">Backend activity</h2>
-            <span id="playback-state" role="status">No recording</span>
+      <section class="terminal" aria-labelledby="activity-title">
+        <div class="terminal-header">
+          <h2 id="activity-title">Backend activity</h2>
+          <span id="playback-state" role="status">No recording</span>
+        </div>
+        <div class="inventory-bar" aria-label="Inventory">
+          <div class="inventory-values">
+            <span>available=<strong id="available">5</strong></span>
+            <span>reserved=<strong id="reserved">0</strong></span>
+            <span>sold=<strong id="sold">0</strong></span>
           </div>
-          <div class="terminal-controls">
-            <button type="button" id="pause" hidden disabled>Pause</button>
-            <button type="button" id="skip" hidden disabled>Show all</button>
-            <button type="button" id="replay" hidden disabled>Replay</button>
-            <label>Speed <select id="speed"><option value="normal">Normal</option><option value="fast">Fast</option><option value="slow">Slow</option></select></label>
-            <label>Filter <select id="filter"><option value="all">All entries</option><option value="ok">Successful calls</option><option value="rejected">Rejected calls</option><option value="snapshot">Inventory snapshots</option></select></label>
-            <label class="follow"><input type="checkbox" id="follow" checked /> Follow log</label>
-          </div>
-          <div id="log" class="log" tabindex="0" role="region" aria-label="Recorded backend activity">
-            <p id="log-placeholder">Run a scenario to record backend activity.</p>
-            <div id="log-lines"></div>
-          </div>
-          <div class="terminal-footer">
+          <span id="stock-caption">Preset stock</span>
+        </div>
+        <div class="terminal-controls">
+          <button type="button" id="pause" hidden disabled>Pause</button>
+          <button type="button" id="skip" hidden disabled>Show all</button>
+          <button type="button" id="replay" hidden disabled>Replay</button>
+          <label>Speed <select id="speed"><option value="normal">Normal</option><option value="fast">Fast</option><option value="slow">Slow</option></select></label>
+          <label>Filter <select id="filter"><option value="all">All entries</option><option value="ok">Successful calls</option><option value="rejected">Rejected calls</option><option value="snapshot">Inventory snapshots</option></select></label>
+          <label class="follow"><input type="checkbox" id="follow" checked /> Follow log</label>
+        </div>
+        <div id="log" class="log" tabindex="0" role="region" aria-label="Recorded backend activity">
+          <p id="log-placeholder">Run a scenario to record backend activity.</p>
+          <div id="log-lines"></div>
+        </div>
+        <div class="terminal-footer">
+          <div class="log-summary">
             <span id="log-progress" role="status">0 entries</span>
             <span id="log-counts">0 successful · 0 rejected</span>
           </div>
-        </section>
-
-        <section id="result" class="panel results" hidden aria-label="Scenario result">
-          <div class="section-heading"><span id="verification" role="status"></span><span id="record-metadata" class="metadata"></span></div>
-          <details id="check-details"><summary>Checks</summary><ul id="assertions"></ul></details>
-        </section>
-        <p id="error" class="error" role="alert" hidden></p>
+          <section id="result" class="results" hidden aria-label="Scenario result">
+            <div class="section-heading"><span id="verification" role="status"></span><span id="record-metadata" class="metadata"></span></div>
+            <details id="check-details"><summary>Checks</summary><ul id="assertions"></ul></details>
+          </section>
+        </div>
       </section>
     </div>
+    <p id="error" class="error" role="alert" hidden></p>
   </main>
 </body>
 </html>

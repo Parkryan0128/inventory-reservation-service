@@ -154,7 +154,7 @@ test("the dashboard omits connection badges, redundant explanations, raw respons
 });
 
 
-test("desktop hierarchy keeps the compact scenario sidebar beside a wider terminal", async ({ page }) => {
+test("desktop hierarchy aligns the scenario sidebar and terminal with results inside", async ({ page }) => {
   await ready(page);
   const sidebar = await page.locator(".sidebar").boundingBox();
   const terminal = await page.locator(".terminal").boundingBox();
@@ -163,6 +163,7 @@ test("desktop hierarchy keeps the compact scenario sidebar beside a wider termin
   expect(terminal.x).toBeGreaterThan(sidebar.x);
   expect(terminal.width).toBeGreaterThan(sidebar.width * 1.7);
   expect(Math.abs(terminal.y - sidebar.y)).toBeLessThan(4);
+  expect(Math.abs(terminal.y + terminal.height - sidebar.y - sidebar.height)).toBeLessThan(4);
   await expect(page.locator("#pause")).toBeHidden();
   await expect(page.locator("#skip")).toBeHidden();
   await expect(page.locator("#replay")).toBeHidden();
@@ -178,6 +179,10 @@ test("desktop hierarchy keeps the compact scenario sidebar beside a wider termin
   await expect(page.locator("#replay")).toBeVisible();
   await expect(page.locator("#result")).toBeVisible();
   const result = await page.locator("#result").boundingBox();
-  expect(result.x).toBe(terminal.x);
-  expect(result.width).toBe(terminal.width);
+  const completedTerminal = await page.locator(".terminal").boundingBox();
+  const completedSidebar = await page.locator(".sidebar").boundingBox();
+  expect(result.x).toBeGreaterThan(completedTerminal.x);
+  expect(result.x + result.width).toBeLessThan(completedTerminal.x + completedTerminal.width);
+  expect(result.y + result.height).toBeLessThan(completedTerminal.y + completedTerminal.height);
+  expect(Math.abs(completedTerminal.y + completedTerminal.height - completedSidebar.y - completedSidebar.height)).toBeLessThan(4);
 });

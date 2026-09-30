@@ -5,31 +5,26 @@ const presets = {
     title: "Concurrent reservations", stock: [5, 0, 0],
     description: "100 customers try to buy one unit each when only 5 units remain. The demo runs 100 reservation calls through 16 workers.",
     mechanism: "Each request locks the same product row before checking and updating stock. Requests that find no available stock are rejected.",
-    expected: "5 RESERVED · 95 INSUFFICIENT_STOCK. Final stock: 0 available, 5 reserved.",
   },
   idempotency: {
     title: "Duplicate requests", stock: [10, 0, 0],
     description: "A customer retries the same 3-unit reservation 16 times. One additional request reuses the key with a different quantity.",
     mechanism: "Matching customer, key and payload return the existing order. A changed quantity with the same key is rejected.",
-    expected: "The same order ID in all 16 replies. Only 3 units held. One IDEMPOTENCY_CONFLICT.",
   },
   race: {
     title: "Payment vs cancel", stock: [0, 1, 0],
     description: "A customer cancels just as a payment succeeds. Two workers act on the same reserved order.",
     mechanism: "Both operations lock the order. One changes its state; the other finds a completed transition and is rejected.",
-    expected: "One CONFIRMED or CANCELLED, and one INVALID_TRANSITION. Stock moves only once.",
   },
   lifecycle: {
     title: "Order lifecycle", stock: [12, 0, 0],
     description: "Three orders take different paths: payment succeeds, the customer cancels, or payment fails. Each final action is repeated.",
     mechanism: "Payment moves held stock to sold. Cancellation and payment failure return it to available. Repeating the same action leaves stock unchanged.",
-    expected: "Repeated order IDs keep the same final state. Final stock: 9 available, 0 reserved, 3 sold.",
   },
   expiry: {
     title: "Reservation expiry", stock: [3, 2, 0],
     description: "A customer reserves 2 units but does not pay. By default the hold expires after 2 minutes; this demo advances only that order’s deadline.",
     mechanism: "Early expiry does nothing. After the deadline, the expiry service releases the 2 units. Retrying expiry makes no further change.",
-    expected: "NO_CHANGE → EXPIRED → NO_CHANGE. Final stock: 5 available, 0 reserved.",
   },
 };
 const $ = id => document.getElementById(id);
@@ -91,8 +86,7 @@ function choose(name) {
   $("scenario-title").textContent = preset.title;
   $("description").textContent = preset.description;
   $("mechanism").textContent = preset.mechanism;
-  $("expected").textContent = preset.expected;
-  inventory({ available: preset.stock[0], reserved: preset.stock[1], sold: preset.stock[2] }, "Preset preview · no database changes yet.");
+  inventory({ available: preset.stock[0], reserved: preset.stock[1], sold: preset.stock[2] }, "Preset stock");
   document.querySelectorAll("[data-scenario]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.scenario === name)));
   controls();
 }
@@ -126,7 +120,7 @@ function appendEntry(e) {
   row.append(element("span", ` ${detail}`, "log-data"));
   $("log-lines").append(row);
   const stock = inventoryAt(result, shown);
-  inventory(stock.inventory, `${stock.source} · historical data for this run`);
+  inventory(stock.inventory, stock.source);
   $("log-progress").textContent = `${shown.length} / ${result.activity.length} recorded entries`;
   $("log-counts").textContent = `${shown.filter(e => entryLevel(e) === "ok").length} successful · ${shown.filter(e => entryLevel(e) === "rejected").length} rejected`;
   if ($("follow").checked) $("log").scrollTop = $("log").scrollHeight;
@@ -157,7 +151,7 @@ function startReplay() {
   replay.stop();
   clearLog();
   $("result").hidden = true;
-  inventory(result.snapshots[0].inventory, `First recorded snapshot · ${result.snapshots[0].label}`);
+  inventory(result.snapshots[0].inventory, "First recorded snapshot");
   replay.setSpeed($("speed").value);
   replay.load(result.activity);
   replay.play();

@@ -44,7 +44,7 @@ Requires Docker with Compose v2.
 docker compose up --build -d
 ```
 
-Open [127.0.0.1:8080](http://127.0.0.1:8080/) and click **Run scenario**. The page explains the purchase and reservation flow, then shows each scenario's setup, backend behavior and expected log entries beside the Backend activity terminal. Inventory counters and a compact result section show recorded outcomes. No login or manual product setup is needed.
+Open [127.0.0.1:8080](http://127.0.0.1:8080/) and click **Run scenario**. The page explains the three-step purchase and reservation flow, then shows each scenario's setup and backend behavior beside the Backend activity terminal. The terminal shows inventory counters at the top and recorded results at the bottom. No login or manual product setup is needed.
 
 The default scenario submits 100 reservation service calls through 16 server workers for five units. It expects five reservations and 95 insufficient-stock rejections. Other presets cover duplicate requests, payment versus cancellation, the order lifecycle, and expiry.
 

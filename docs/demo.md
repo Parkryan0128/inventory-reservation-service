@@ -8,7 +8,7 @@ Open `http://127.0.0.1:8080/`. Choose a scenario and click **Run scenario**. No 
 
 The purchase flow explains how buying reserves stock, payment confirms it, and cancellation, failed payment or expiry releases it. The demo profile uses a two-minute hold by default; `RESERVATION_TTL` can override it. Expiry is a separate `EXPIRED` state, not a customer cancellation.
 
-Each scenario explains the situation, how the backend handles it and what to look for in the log. The original Backend activity terminal retains its playback, speed, filter and follow controls. Inventory counters accompany a compact result section; expand **Checks** for assertions. Failed checks open automatically. The normal account-based workspace remains at `/index.html`.
+Each scenario explains the situation and how the backend handles it. The scenario panel and Backend activity terminal sit side by side with aligned edges. The terminal retains its playback, speed, filter and follow controls, with inventory counters at the top and compact results in its footer. Expand **Checks** for assertions; failed checks open automatically. The normal account-based workspace remains at `/index.html`.
 
 ## Scenarios
 
