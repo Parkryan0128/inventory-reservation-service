@@ -6,7 +6,9 @@ docker compose up --build -d
 
 Open `http://127.0.0.1:8080/`. Choose a scenario and click **Run scenario**. No login, account switching or manual product setup is needed.
 
-The page has a compact product/inventory panel, scenario explanation and configuration, a terminal-style activity log, and a measured result section. The normal account-based workspace remains at `/index.html`, without a dashboard footer link. Execution details are documented here instead of in a separate technical panel.
+The purchase flow explains how buying reserves stock, payment confirms it, and cancellation, failed payment or expiry releases it. The demo profile uses a two-minute hold by default; `RESERVATION_TTL` can override it. Expiry is a separate `EXPIRED` state, not a customer cancellation.
+
+Each scenario explains the situation, how the backend handles it and what to look for in the log. The original Backend activity terminal retains its playback, speed, filter and follow controls. Inventory counters accompany a compact result section; expand **Checks** for assertions. Failed checks open automatically. The normal account-based workspace remains at `/index.html`.
 
 ## Scenarios
 
@@ -30,7 +32,7 @@ Use **Pause/Resume**, **Show all**, **Replay**, speed selection, and filters to 
 
 **Follow log** is checked by default on page load. Unchecking it before a run keeps automatic scrolling off. The choice persists across reruns, replay, and preset switches, and changing it during playback takes effect immediately. Scrolling up with a mouse wheel or navigation keys also turns it off. The log viewport does not use browser scroll anchoring to move the position while following is disabled.
 
-During concurrent reservation and duplicate-request playback, the product counters are explicitly labelled **Derived from replayed responses** when calculated from unique successful order IDs and quantities. They are not intermediate database reads. At a recorded snapshot, actual database values replace that calculation. Other scenarios update inventory only at recorded snapshot markers. The result table always compares actual recorded database snapshots. For payment/cancel and expiry, the first snapshot is after setup has reserved stock.
+During concurrent reservation and duplicate-request playback, the inventory counters are explicitly labelled **Derived from replayed responses** when calculated from unique successful order IDs and quantities. They are not intermediate database reads. At a recorded snapshot, actual database values replace that calculation. Other scenarios update inventory only at recorded snapshot markers. Final counters use the last recorded database snapshot. For payment/cancel and expiry, the first snapshot is after setup has reserved stock.
 
 Results are historical. The normal scheduler may subsequently expire unpaid reservations. Every run creates a new product and isolated owner; previous data is not reset. Generated rows remain in the local database. A failed or timed-out response does not prove all work was rolled back.
 

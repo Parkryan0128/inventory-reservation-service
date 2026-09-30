@@ -12,30 +12,29 @@
   <main>
     <header class="page-header">
       <h1>Inventory Reservation System</h1>
-      <p>Backend inventory dashboard · Spring Boot · PostgreSQL · Redis</p>
     </header>
+
+    <section class="workflow panel" aria-labelledby="workflow-title">
+      <h2 id="workflow-title">Purchase flow</h2>
+      <div class="workflow-path">
+        <div class="workflow-step">
+          <strong>1. Customer clicks Buy</strong>
+          <p>The service checks whether the requested quantity is available.</p>
+        </div>
+        <div class="workflow-step">
+          <strong>2. Stock is reserved</strong>
+          <p>If available, an order becomes <code>RESERVED</code>. Its units are held for 2 minutes by default while the customer pays.</p>
+        </div>
+        <div class="workflow-outcomes" aria-label="Reservation outcomes">
+          <div><span>Payment succeeds</span><span><code>CONFIRMED</code><small>Held stock becomes sold stock.</small></span></div>
+          <div><span>Cancel / payment fails</span><span><code>CANCELLED / PAYMENT_FAILED</code><small>Held stock becomes available again.</small></span></div>
+          <div><span>Unpaid at the deadline</span><span><code>EXPIRED</code><small>The expiry worker releases the held stock.</small></span></div>
+        </div>
+      </div>
+    </section>
 
     <div class="dashboard">
       <aside class="sidebar">
-        <section class="product panel" aria-label="Product and inventory">
-          <div class="product-summary">
-            <div class="product-art" aria-hidden="true">
-              <div class="gpu"><div class="fan"></div><div class="fan"></div><span>VECTOR / 01</span><div class="contacts"></div></div>
-            </div>
-            <div class="product-name">
-              <h2>Vector One</h2>
-              <p>Graphics card</p>
-              <strong>CA$899.00</strong>
-            </div>
-          </div>
-          <div class="stock" aria-label="Inventory">
-            <div><span>Available</span><strong id="available">5</strong></div>
-            <div><span>Reserved</span><strong id="reserved">0</strong></div>
-            <div><span>Sold</span><strong id="sold">0</strong></div>
-          </div>
-          <p id="stock-caption" class="stock-caption">Preset stock</p>
-        </section>
-
         <nav class="scenario-nav panel" aria-label="Scenarios">
           <h2>Scenarios</h2>
           <button type="button" data-scenario="contention" aria-pressed="true">Concurrent reservations</button>
@@ -48,16 +47,24 @@
         <section class="scenario panel" aria-labelledby="scenario-title">
           <h2 id="scenario-title">Concurrent reservations</h2>
           <p id="description" class="scenario-description"></p>
-          <dl id="configuration" class="configuration"></dl>
           <div class="scenario-copy">
-            <h3>Tests</h3>
+            <h3>In the backend</h3>
             <p id="mechanism"></p>
           </div>
           <div class="scenario-copy expected">
-            <h3>Expected</h3>
+            <h3>Look for in the log</h3>
             <p id="expected"></p>
           </div>
           <button type="button" id="run" class="primary" disabled>Run scenario</button>
+        </section>
+
+        <section class="inventory panel" aria-label="Inventory">
+          <div class="stock">
+            <div><span>Available</span><strong id="available">5</strong></div>
+            <div><span>Reserved</span><strong id="reserved">0</strong></div>
+            <div><span>Sold</span><strong id="sold">0</strong></div>
+          </div>
+          <p id="stock-caption" class="stock-caption">Preset stock</p>
         </section>
       </aside>
 
@@ -85,17 +92,9 @@
           </div>
         </section>
 
-        <section id="result" class="panel results" hidden aria-labelledby="result-title">
-          <div class="section-heading"><h2 id="result-title">Result</h2><span id="verification" role="status"></span></div>
-          <dl id="metrics" class="metrics"></dl>
-          <div class="result-detail">
-            <div>
-              <h3>Inventory</h3>
-              <table><thead><tr><th scope="col">State</th><th scope="col">Before</th><th scope="col">After</th></tr></thead><tbody id="stock-table"></tbody></table>
-            </div>
-            <div><h3>Checks</h3><ul id="assertions"></ul></div>
-          </div>
-          <p id="record-metadata" class="metadata"></p>
+        <section id="result" class="panel results" hidden aria-label="Scenario result">
+          <div class="section-heading"><span id="verification" role="status"></span><span id="record-metadata" class="metadata"></span></div>
+          <details id="check-details"><summary>Checks</summary><ul id="assertions"></ul></details>
         </section>
         <p id="error" class="error" role="alert" hidden></p>
       </section>

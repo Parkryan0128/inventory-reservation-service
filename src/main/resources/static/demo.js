@@ -3,38 +3,33 @@ import { DemoClient, Replay, entryLevel, inventoryAt, summarize } from "./demo-c
 const presets = {
   contention: {
     title: "Concurrent reservations", stock: [5, 0, 0],
-    description: "100 customers compete for 5 available units.",
-    config: [["Requests", "100"], ["Workers", "16"], ["Stock", "5"], ["Quantity", "1 / request"]],
-    mechanism: "Prevents overselling when concurrent reservations compete for the same inventory.",
-    expected: "5 reserved · 95 rejected · 0 oversold",
+    description: "100 customers try to buy one unit each when only 5 units remain. The demo runs 100 reservation calls through 16 workers.",
+    mechanism: "Each request locks the same product row before checking and updating stock. Requests that find no available stock are rejected.",
+    expected: "5 RESERVED · 95 INSUFFICIENT_STOCK. Final stock: 0 available, 5 reserved.",
   },
   idempotency: {
     title: "Duplicate requests", stock: [10, 0, 0],
-    description: "One customer retries the same 3-unit reservation 16 times.",
-    config: [["Identical requests", "16"], ["Workers", "16"], ["Stock", "10"], ["Quantity", "3"]],
-    mechanism: "The same idempotency key must return one order instead of reserving stock repeatedly.",
-    expected: "16 replies · 1 order · 3 units reserved",
+    description: "A customer retries the same 3-unit reservation 16 times. One additional request reuses the key with a different quantity.",
+    mechanism: "Matching customer, key and payload return the existing order. A changed quantity with the same key is rejected.",
+    expected: "The same order ID in all 16 replies. Only 3 units held. One IDEMPOTENCY_CONFLICT.",
   },
   race: {
     title: "Payment vs cancel", stock: [0, 1, 0],
-    description: "Payment and cancellation hit the same reserved order at the same time.",
-    config: [["Competing calls", "2"], ["Workers", "2"], ["Orders", "1"], ["Start", "RESERVED"]],
-    mechanism: "Only one terminal transition may change inventory for the order.",
-    expected: "1 transition wins · 1 rejected · 0 double stock movement",
+    description: "A customer cancels just as a payment succeeds. Two workers act on the same reserved order.",
+    mechanism: "Both operations lock the order. One changes its state; the other finds a completed transition and is rejected.",
+    expected: "One CONFIRMED or CANCELLED, and one INVALID_TRANSITION. Stock moves only once.",
   },
   lifecycle: {
     title: "Order lifecycle", stock: [12, 0, 0],
-    description: "Confirm, cancel, and fail payment while repeating each terminal operation.",
-    config: [["Orders", "3"], ["Service calls", "9"], ["Execution", "Sequential"], ["Stock", "12"]],
-    mechanism: "Repeated terminal operations must not sell or release the same inventory twice.",
-    expected: "9 available · 0 reserved · 3 sold",
+    description: "Three orders take different paths: payment succeeds, the customer cancels, or payment fails. Each final action is repeated.",
+    mechanism: "Payment moves held stock to sold. Cancellation and payment failure return it to available. Repeating the same action leaves stock unchanged.",
+    expected: "Repeated order IDs keep the same final state. Final stock: 9 available, 0 reserved, 3 sold.",
   },
   expiry: {
     title: "Reservation expiry", stock: [3, 2, 0],
-    description: "An unpaid reservation expires and releases its held stock.",
-    config: [["Held", "2 / 5"], ["Expiry calls", "3"], ["Deadline", "Fast-forward"], ["Execution", "Sequential"]],
-    mechanism: "Expired stock returns once; early or repeated expiry calls must not move it again.",
-    expected: "5 available · 0 reserved · 0 sold",
+    description: "A customer reserves 2 units but does not pay. By default the hold expires after 2 minutes; this demo advances only that order’s deadline.",
+    mechanism: "Early expiry does nothing. After the deadline, the expiry service releases the 2 units. Retrying expiry makes no further change.",
+    expected: "NO_CHANGE → EXPIRED → NO_CHANGE. Final stock: 5 available, 0 reserved.",
   },
 };
 const $ = id => document.getElementById(id);
@@ -53,13 +48,6 @@ function element(tag, text, className) {
   if (text !== undefined) node.textContent = text;
   if (className) node.className = className;
   return node;
-}
-function renderValues(node, entries) {
-  node.replaceChildren(...entries.map(([key, value]) => {
-    const item = element("div");
-    item.append(element("dt", key), element("dd", String(value)));
-    return item;
-  }));
 }
 function inventory(p, caption) {
   for (const key of ["available", "reserved", "sold"]) $(key).textContent = p[key];
@@ -104,7 +92,6 @@ function choose(name) {
   $("description").textContent = preset.description;
   $("mechanism").textContent = preset.mechanism;
   $("expected").textContent = preset.expected;
-  renderValues($("configuration"), preset.config);
   inventory({ available: preset.stock[0], reserved: preset.stock[1], sold: preset.stock[2] }, "Preset preview · no database changes yet.");
   document.querySelectorAll("[data-scenario]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.scenario === name)));
   controls();
@@ -150,19 +137,13 @@ function showResult() {
   $("result").hidden = false;
   $("verification").textContent = summary.ok ? "Checks passed" : "Checks failed";
   $("verification").className = summary.ok ? "pass" : "fail";
-  renderValues($("metrics"), summary.metrics);
-  const first = result.snapshots[0].inventory;
   const last = result.snapshots.at(-1).inventory;
-  $("stock-table").replaceChildren(...["available", "reserved", "sold"].map(key => {
-    const row = element("tr");
-    row.append(element("td", key[0].toUpperCase() + key.slice(1)), element("td", first[key]), element("td", last[key]));
-    return row;
-  }));
   const checks = Object.entries(result.checks);
   if (!summary.ok && checks.every(([, v]) => v)) checks.push(["Returned counts and stock match the scenario", false]);
   $("assertions").replaceChildren(...checks.map(([label, passed]) => element("li", `${passed ? "✓" : "✕"} ${label}`, passed ? "" : "failed")));
-  $("record-metadata").textContent = `Server execution: ${result.durationMs} ms · Completed: ${result.completedAt} · Product: ${last.id}`;
-  inventory(last, `Final recorded snapshot · ${last.available} + ${last.reserved} + ${last.sold} = ${last.initialStock} units`);
+  $("check-details").open = !summary.ok;
+  $("record-metadata").textContent = `Server execution: ${result.durationMs} ms`;
+  inventory(last, "Final recorded snapshot");
 }
 function playbackChanged(player) {
   if (!result) return;
