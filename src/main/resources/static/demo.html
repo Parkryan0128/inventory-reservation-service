@@ -62,14 +62,14 @@
           </section>
         </div>
         <section id="manual-panel" class="manual-panel" aria-label="Manual controls" hidden>
-          <h2>Demo item</h2>
+          <h2>Shared inventory</h2>
           <p id="manual-product" class="resource-id">Connecting…</p>
-          <p class="manual-description">Change stock and buy from the same item. Only available stock can be removed.</p>
+          <p class="manual-description">All visitors use the same stock. Only available stock can be removed. Up to 10 units per action.</p>
           <button type="button" id="manual-connect" hidden>Reconnect</button>
           <form id="stock-form" class="manual-group">
             <h3>Change stock</h3>
             <label for="stock-quantity">Quantity</label>
-            <input id="stock-quantity" type="number" min="1" max="10000" step="1" value="1" required />
+            <input id="stock-quantity" type="number" min="1" max="10" step="1" value="1" required />
             <div class="manual-actions">
               <button type="submit" data-action="ADD_STOCK" disabled>+ Add stock</button>
               <button type="submit" data-action="REMOVE_STOCK" disabled>− Remove stock</button>
@@ -79,12 +79,12 @@
             <h3>Purchase</h3>
             <label for="buy-quantity">Quantity</label>
             <div class="purchase-action">
-              <input id="buy-quantity" type="number" min="1" max="10000" step="1" value="1" required />
+              <input id="buy-quantity" type="number" min="1" max="10" step="1" value="1" required />
               <button type="submit" data-action="BUY" disabled>Buy</button>
             </div>
           </form>
-          <section id="manual-order" class="manual-group" aria-label="Current order" hidden>
-            <h3>Current order <span id="manual-order-status" role="status"></span></h3>
+          <section id="manual-order" class="manual-group" aria-label="Your order" hidden>
+            <h3>Your order <span id="manual-order-status" role="status"></span></h3>
             <p id="manual-order-id" class="resource-id"></p>
             <p id="manual-order-detail" class="manual-description"></p>
             <div id="manual-order-actions" class="manual-actions">
@@ -113,7 +113,7 @@
           <button type="button" id="skip" hidden disabled>Show all</button>
           <button type="button" id="replay" hidden disabled>Replay</button>
           <label id="speed-control">Speed <select id="speed"><option value="normal">Normal</option><option value="fast">Fast</option><option value="slow">Slow</option></select></label>
-          <label>Filter <select id="filter"><option value="all">All entries</option><option value="ok">Successful calls</option><option value="rejected">Rejected calls</option><option value="snapshot">Inventory snapshots</option></select></label>
+          <label>Filter <select id="filter"><option value="all">All entries</option><option value="ok">Successful calls</option><option value="rejected">Rejected calls</option><option id="snapshot-filter" value="snapshot">Inventory snapshots</option><option id="own-filter" value="own" hidden>Your actions</option></select></label>
           <label class="follow"><input type="checkbox" id="follow" checked /> Follow log</label>
         </div>
         <div id="log" class="log" tabindex="0" role="region" aria-label="Recorded backend activity">

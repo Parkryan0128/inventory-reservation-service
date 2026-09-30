@@ -2,7 +2,6 @@ package dev.ryanpark.reservation.demo;
 
 import dev.ryanpark.reservation.common.ApiException;
 import dev.ryanpark.reservation.inventory.CatalogService;
-import dev.ryanpark.reservation.inventory.ProductDtos.CreateProduct;
 import dev.ryanpark.reservation.inventory.ProductDtos.ProductView;
 import dev.ryanpark.reservation.order.OrderDtos.OrderView;
 import dev.ryanpark.reservation.order.OrderDtos.ReserveRequest;
@@ -12,11 +11,11 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
-import java.util.ArrayDeque;
 import java.util.List;
-import java.util.Locale;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -29,6 +28,9 @@ public class ManualDemoService {
   private final CatalogService catalog;
   private final OrderService orders;
   private final Clock clock;
+  private final SharedDemoProduct product;
+  private final ManualActivityLog activity;
+  private final long actionIntervalMs;
   private final TransactionTemplate writes;
   private final TransactionTemplate reads;
 
@@ -36,10 +38,18 @@ public class ManualDemoService {
       CatalogService catalog,
       OrderService orders,
       Clock clock,
+      SharedDemoProduct product,
+      ManualActivityLog activity,
+      @Value("${app.manual-action-interval-ms:500}") long actionIntervalMs,
       PlatformTransactionManager transactions) {
     this.catalog = catalog;
     this.orders = orders;
     this.clock = clock;
+    this.product = product;
+    this.activity = activity;
+    if (actionIntervalMs < 0 || actionIntervalMs > 60_000)
+      throw new IllegalArgumentException("Manual action interval must be between 0 and 60000 ms");
+    this.actionIntervalMs = actionIntervalMs;
     writes = new TransactionTemplate(transactions);
     reads = new TransactionTemplate(transactions);
     reads.setReadOnly(true);
@@ -47,24 +57,13 @@ public class ManualDemoService {
   }
 
   public Workspace create() {
-    var product =
-        catalog.create(
-            new CreateProduct(
-                "MANUAL-" + UUID.randomUUID().toString().toUpperCase(Locale.ROOT),
-                "Demo item",
-                1200,
-                "CAD",
-                5));
     return new Workspace(product.id());
   }
 
   public State state(Workspace workspace) {
     synchronized (workspace) {
       var snapshot = reads.execute(status -> snapshot(workspace, workspace.orderId));
-      if (!snapshot.equals(workspace.last)) {
-        record(workspace, "refresh", "SNAPSHOT", "info", "Database snapshot", 0, 0, snapshot);
-      }
-      return view(workspace, snapshot);
+      return view(workspace, snapshot, null);
     }
   }
 
@@ -72,10 +71,20 @@ public class ManualDemoService {
     if (command == null
         || command.action() == null
         || command.quantity() < 1
-        || command.quantity() > 10_000) {
-      throw ApiException.invalid("An action and quantity between 1 and 10000 are required");
+        || command.quantity() > 10) {
+      throw ApiException.invalid("An action and quantity between 1 and 10 are required");
     }
     synchronized (workspace) {
+      if (clock.instant().isBefore(workspace.nextActionAt)) {
+        var snapshot = reads.execute(status -> snapshot(workspace, workspace.orderId));
+        return new Outcome(
+            429,
+            view(
+                workspace,
+                snapshot,
+                new Result("RATE_LIMITED", "rejected", "Wait briefly before the next action", 0)));
+      }
+      workspace.nextActionAt = clock.instant().plusMillis(actionIntervalMs);
       long started = System.nanoTime();
       Snapshot snapshot;
       String code;
@@ -134,16 +143,23 @@ public class ManualDemoService {
         level = "rejected";
         statusCode = rejected.status().value();
       }
-      record(
-          workspace,
-          command.action().name().toLowerCase(Locale.ROOT),
-          code,
-          level,
-          message,
-          quantity,
-          (System.nanoTime() - started) / 1_000_000,
-          snapshot);
-      return new Outcome(statusCode, view(workspace, snapshot));
+      // Order transitions (including scheduler expiry) are observed after commit by the log.
+      // Stock changes and rejected requests are recorded here only after their transaction ends.
+      if (statusCode != 200
+          || command.action() == Action.ADD_STOCK
+          || command.action() == Action.REMOVE_STOCK) {
+        activity.record(
+            workspace.owner,
+            command.action().name().toLowerCase(java.util.Locale.ROOT),
+            code,
+            level,
+            message,
+            quantity,
+            snapshot.inventory(),
+            snapshot.order());
+      }
+      var result = new Result(code, level, message, (System.nanoTime() - started) / 1_000_000);
+      return new Outcome(statusCode, view(workspace, snapshot, result));
     }
   }
 
@@ -152,34 +168,16 @@ public class ManualDemoService {
     return new Snapshot(catalog.get(workspace.productId), order);
   }
 
-  private void record(
-      Workspace workspace,
-      String operation,
-      String code,
-      String level,
-      String message,
-      int quantity,
-      long durationMs,
-      Snapshot snapshot) {
-    workspace.activity.addLast(
-        new Entry(
-            ++workspace.sequence,
-            clock.instant(),
-            operation,
-            code,
-            level,
-            message,
-            quantity,
-            durationMs,
-            snapshot.inventory(),
-            snapshot.order()));
-    while (workspace.activity.size() > 200) workspace.activity.removeFirst();
-    workspace.last = snapshot;
-  }
-
-  private State view(Workspace workspace, Snapshot snapshot) {
+  private State view(Workspace workspace, Snapshot snapshot, Result result) {
     return new State(
-        snapshot.inventory(), snapshot.order(), List.copyOf(workspace.activity), clock.instant());
+        snapshot.inventory(),
+        snapshot.order(),
+        activity.entries(workspace.owner, workspace.productId),
+        clock.instant(),
+        activity.streamId(),
+        workspace.owner.substring(7, 15),
+        Math.max(0, Duration.between(clock.instant(), workspace.nextActionAt).toMillis()),
+        result);
   }
 
   public enum Action {
@@ -190,15 +188,13 @@ public class ManualDemoService {
     CANCEL
   }
 
-  public record Command(@NotNull Action action, @Min(1) @Max(10_000) int quantity) {}
+  public record Command(@NotNull Action action, @Min(1) @Max(10) int quantity) {}
 
   public static final class Workspace {
     private final UUID productId;
     private final String owner = "manual-" + UUID.randomUUID();
     private UUID orderId;
-    private long sequence;
-    private Snapshot last;
-    private final ArrayDeque<Entry> activity = new ArrayDeque<>();
+    private Instant nextActionAt = Instant.EPOCH;
 
     private Workspace(UUID productId) {
       this.productId = productId;
@@ -207,20 +203,17 @@ public class ManualDemoService {
 
   private record Snapshot(ProductView inventory, OrderView order) {}
 
-  public record Entry(
-      long sequence,
-      Instant recordedAt,
-      String operation,
-      String code,
-      String level,
-      String message,
-      int quantity,
-      long durationMs,
-      ProductView inventory,
-      OrderView order) {}
+  public record Result(String code, String level, String message, long durationMs) {}
 
   public record State(
-      ProductView inventory, OrderView order, List<Entry> activity, Instant observedAt) {}
+      ProductView inventory,
+      OrderView order,
+      List<ManualActivityLog.Entry> activity,
+      Instant observedAt,
+      String streamId,
+      String visitorId,
+      long retryAfterMs,
+      Result result) {}
 
   public record Outcome(int statusCode, State state) {}
 }

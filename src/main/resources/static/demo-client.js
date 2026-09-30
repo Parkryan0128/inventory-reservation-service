@@ -230,18 +230,22 @@ function validOrder(order, productId) {
 }
 export function validateManualState(state) {
   if (!object(state) || !validInventory(state.inventory) || !validOrder(state.order, state.inventory.id) ||
-      !date(state.observedAt) || !Array.isArray(state.activity) || !state.activity.length || state.activity.length > 200 ||
-      !object(state.activity[0])) manualInvalid();
-  let previous = state.activity[0].sequence - 1;
+      !date(state.observedAt) || !Array.isArray(state.activity) || state.activity.length > 200 ||
+      typeof state.streamId !== "string" || !state.streamId || typeof state.visitorId !== "string" || !state.visitorId ||
+      !count(state.retryAfterMs) || state.retryAfterMs > 60000) manualInvalid();
+  let previous = 0;
   for (const e of state.activity) {
-    if (!object(e) || !count(e.sequence) || e.sequence < 1 || e.sequence !== ++previous || !date(e.recordedAt) ||
-        ![e.operation, e.code, e.message].every(v => typeof v === "string" && v.length) ||
-        !["ok", "rejected", "info"].includes(e.level) || !count(e.quantity) || !count(e.durationMs) ||
+    if (!object(e) || !count(e.sequence) || e.sequence <= previous || !date(e.recordedAt) ||
+        ![e.actor, e.operation, e.code, e.message].every(v => typeof v === "string" && v.length) ||
+        !["ok", "rejected", "info"].includes(e.level) || !count(e.quantity) ||
         !validInventory(e.inventory, state.inventory.id) || !validOrder(e.order, state.inventory.id)) manualInvalid();
+    previous = e.sequence;
   }
-  const last = state.activity.at(-1);
-  if (["available", "reserved", "sold", "initialStock"].some(k => last.inventory[k] !== state.inventory[k]) ||
-      last.order?.id !== state.order?.id || last.order?.status !== state.order?.status) manualInvalid();
+  // Shared historical entries can describe another visitor's order and an older inventory.
+  // The current response's own result must never be inferred from the last shared entry.
+  if (state.result !== null && (!object(state.result) ||
+      ![state.result.code, state.result.message].every(v => typeof v === "string" && v.length) ||
+      !["ok", "rejected"].includes(state.result.level) || !count(state.result.durationMs))) manualInvalid();
   return state;
 }
 
@@ -257,22 +261,22 @@ export class ManualClient {
     let body;
     try { body = await response.json(); }
     catch { throw new Error(`The server returned an unreadable response (HTTP ${response.status}).`); }
-    if (!response.ok && !(allowRejection && [400, 409].includes(response.status) && Array.isArray(body?.activity))) {
+    if (!response.ok && !(allowRejection && [400, 409, 429].includes(response.status) && Array.isArray(body?.activity))) {
       throw new Error(body?.detail || `Manual request failed (HTTP ${response.status}).`);
     }
     const state = validateManualState(body);
     if (this.productId && state.inventory.id !== this.productId) {
-      throw new Error("The demo session changed. Reload the page to open the current item.");
+      throw new Error("The shared demo item changed. Reload the page to open the current item.");
     }
-    if (!response.ok && state.activity.at(-1).level !== "rejected") manualInvalid();
+    if (allowRejection && (!state.result || (response.ok ? state.result.level !== "ok" : state.result.level !== "rejected"))) manualInvalid();
     this.productId = state.inventory.id;
     return state;
   }
   state() { return this.request("/api/demo/manual"); }
   open() { return this.write("/api/demo/manual"); }
   act(action, quantity = 1) {
-    if (!manualActions.includes(action) || !Number.isSafeInteger(quantity) || quantity < 1 || quantity > 10000) {
-      return Promise.reject(new Error("Choose an action and a whole quantity between 1 and 10000."));
+    if (!manualActions.includes(action) || !Number.isSafeInteger(quantity) || quantity < 1 || quantity > 10) {
+      return Promise.reject(new Error("Choose an action and a whole quantity between 1 and 10."));
     }
     return this.write("/api/demo/manual/actions", { action, quantity });
   }

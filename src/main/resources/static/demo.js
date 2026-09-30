@@ -35,6 +35,9 @@ let manualState = null;
 let manualBusy = false;
 let manualAvailable = false;
 let manualEpoch = 0;
+let manualReadyAt = 0;
+let manualCooldownTimer;
+let manualLogVersion = "";
 let selected = "contention";
 let result = null;
 let busy = false;
@@ -69,11 +72,13 @@ function controls() {
   $("replay").hidden = !complete;
   $("replay").disabled = !complete || busy;
   $("speed-control").hidden = mode === "manual";
+  $("snapshot-filter").hidden = mode === "manual";
+  $("own-filter").hidden = mode !== "manual";
   document.querySelectorAll("[data-mode]").forEach(b => { b.disabled = busy || manualBusy; });
   const reserved = manualState?.order?.status === "RESERVED";
   document.querySelectorAll("[data-action]").forEach(b => {
     const action = b.dataset.action;
-    b.disabled = manualBusy || !manualAvailable || !manualState ||
+    b.disabled = manualBusy || performance.now() < manualReadyAt || !manualAvailable || !manualState ||
       (action === "BUY" && reserved) || (["PAY", "CANCEL"].includes(action) && !reserved);
   });
   $("stock-quantity").disabled = manualBusy;
@@ -81,6 +86,7 @@ function controls() {
   $("manual-connect").hidden = manualAvailable || manualBusy;
 }
 function clearLog() {
+  manualLogVersion = "";
   shown = [];
   $("log-lines").replaceChildren();
   $("log").scrollTop = 0;
@@ -109,7 +115,7 @@ function choose(name) {
 }
 function matches(e) {
   const filter = $("filter").value;
-  if (mode === "manual") return filter === "all" || filter === "snapshot" && e.code === "SNAPSHOT" || filter === e.level;
+  if (mode === "manual") return filter === "all" || filter === "own" && e.actor === "You" || filter === e.level;
   return filter === "all" || filter === "snapshot" && e.snapshotIndex !== null || filter === entryLevel(e);
 }
 function appendEntry(e) {
@@ -227,17 +233,19 @@ async function changeMode(next) {
   if (mode === "scenarios") choose(selected);
   else {
     inventory({ available: "—", reserved: "—", sold: "—" }, "Waiting for server");
-    $("log-placeholder").textContent = "Opening the demo item…";
+    $("log-placeholder").textContent = "Opening shared inventory…";
     await openManual();
   }
   controls();
 }
 
 function renderManual(state) {
-  if (manualState && state.activity.at(-1).sequence < manualState.activity.at(-1).sequence) return;
   manualState = state;
   manualAvailable = true;
-  inventory(state.inventory, `Database snapshot · ${new Date(state.observedAt).toLocaleTimeString()}`);
+  manualReadyAt = performance.now() + state.retryAfterMs;
+  clearTimeout(manualCooldownTimer);
+  if (state.retryAfterMs) manualCooldownTimer = setTimeout(controls, state.retryAfterMs + 10);
+  inventory(state.inventory, `Shared stock · ${new Date(state.observedAt).toLocaleTimeString()}`);
   $("manual-product").textContent = `Product ${state.inventory.id}`;
   $("manual-order").hidden = !state.order;
   if (state.order) {
@@ -247,8 +255,9 @@ function renderManual(state) {
       (state.order.status === "RESERVED" ? ` · Hold ends at ${new Date(state.order.expiresAt).toLocaleTimeString()}` : "");
     $("manual-order-actions").hidden = state.order.status !== "RESERVED";
   }
-  const last = state.activity.at(-1);
-  if ($("log-lines").lastElementChild?.dataset.sequence !== String(last.sequence)) {
+  const version = `${state.streamId}:${state.visitorId}:${state.activity.at(-1)?.sequence || 0}`;
+  if (manualLogVersion !== version) {
+    manualLogVersion = version;
     const position = $("log").scrollTop;
     shown = state.activity;
     $("log-lines").replaceChildren(...state.activity.map(e => {
@@ -256,14 +265,15 @@ function renderManual(state) {
       row.dataset.sequence = e.sequence;
       row.dataset.code = e.code;
       row.dataset.level = e.level;
+      row.dataset.actor = e.actor;
       row.hidden = !matches(e);
       const time = new Date(e.recordedAt).toISOString().slice(11, 23);
       const label = { ok: "OK", rejected: "REJECT", info: "INFO" }[e.level];
       row.append(element("span", `${String(e.sequence).padStart(3, "0")} `, "log-sequence"),
         element("span", `${time} `, "log-time"), element("span", `${label.padEnd(6)} `, "log-level"),
-        element("span", `${e.operation.padEnd(15)} `), element("span", e.code.padEnd(22), "log-code"));
+        element("span", `${e.actor.padEnd(17)} ${e.operation.padEnd(15)} `), element("span", e.code.padEnd(22), "log-code"));
       const p = e.inventory;
-      const detail = `${e.durationMs}ms${e.quantity ? ` qty=${e.quantity}` : ""} available=${p.available} reserved=${p.reserved} sold=${p.sold}` +
+      const detail = `${e.quantity ? `qty=${e.quantity} ` : ""}available=${p.available} reserved=${p.reserved} sold=${p.sold}` +
         (e.order ? ` order=${e.order.id.slice(0, 8)} state=${e.order.status}` : "") +
         (e.level === "rejected" ? ` · ${e.message}` : "");
       row.append(element("span", ` ${detail}`, "log-data"));
@@ -272,10 +282,11 @@ function renderManual(state) {
     }));
     $("log").scrollTop = $("follow").checked ? $("log").scrollHeight : position;
   }
-  $("log-placeholder").hidden = true;
-  $("log-progress").textContent = `${state.activity.length} server entries`;
+  $("log-placeholder").hidden = state.activity.length > 0;
+  $("log-placeholder").textContent = "No activity since this server started. Buy or change the shared stock.";
+  $("log-progress").textContent = `${state.activity.length} / 200 recent entries`;
   $("log-counts").textContent = `${state.activity.filter(e => e.level === "ok").length} successful · ${state.activity.filter(e => e.level === "rejected").length} rejected`;
-  $("playback-state").textContent = "Ready · server responses";
+  $("playback-state").textContent = "Shared activity · updates every 4s";
   controls();
 }
 
@@ -293,7 +304,7 @@ async function openManual() {
   manualBusy = true;
   manualEpoch++;
   controls();
-  $("playback-state").textContent = "Opening demo item";
+  $("playback-state").textContent = "Opening shared inventory";
   try {
     renderManual(await manualClient.open());
     $("error").hidden = true;
@@ -302,7 +313,7 @@ async function openManual() {
 }
 
 async function manualAction(action, quantity) {
-  if (mode !== "manual" || manualBusy || !manualAvailable) return;
+  if (mode !== "manual" || manualBusy || performance.now() < manualReadyAt || !manualAvailable) return;
   manualBusy = true;
   manualEpoch++;
   controls();
@@ -311,8 +322,8 @@ async function manualAction(action, quantity) {
   try {
     const state = await manualClient.act(action, quantity);
     renderManual(state);
-    if (state.activity.at(-1).level === "rejected") {
-      $("error").textContent = state.activity.at(-1).message;
+    if (state.result.level === "rejected") {
+      $("error").textContent = state.result.message;
       $("error").hidden = false;
     }
   } catch (error) { manualError(error); }

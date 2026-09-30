@@ -52,13 +52,20 @@ public class ManualDemoController {
       @Valid @RequestBody Command command, HttpServletRequest request) {
     requireLocal(request);
     var outcome = manual.act(workspace(request.getSession(false)), command);
-    return ResponseEntity.status(outcome.statusCode()).body(outcome.state());
+    var response = ResponseEntity.status(outcome.statusCode());
+    if (outcome.statusCode() == 429) {
+      response.header(
+          "Retry-After", Long.toString(Math.max(1, (outcome.state().retryAfterMs() + 999) / 1000)));
+    }
+    return response.body(outcome.state());
   }
 
   private Workspace workspace(HttpSession session) {
     if (session == null || !(session.getAttribute(WORKSPACE) instanceof Workspace workspace)) {
       throw new ApiException(
-          HttpStatus.NOT_FOUND, "MANUAL_NOT_STARTED", "Open manual mode to create a demo item");
+          HttpStatus.NOT_FOUND,
+          "MANUAL_NOT_STARTED",
+          "Open manual mode to join the shared inventory");
     }
     return workspace;
   }

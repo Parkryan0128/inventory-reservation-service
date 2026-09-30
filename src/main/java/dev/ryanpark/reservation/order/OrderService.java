@@ -4,13 +4,16 @@ import static dev.ryanpark.reservation.order.OrderDtos.OrderView;
 import static dev.ryanpark.reservation.order.OrderDtos.ReserveRequest;
 
 import dev.ryanpark.reservation.common.ApiException;
+import dev.ryanpark.reservation.events.OrderChanged;
 import dev.ryanpark.reservation.events.OutboxRecorder;
+import dev.ryanpark.reservation.inventory.ProductDtos.ProductView;
 import dev.ryanpark.reservation.inventory.ProductRepository;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,13 +25,15 @@ public class OrderService {
   private final Clock clock;
   private final Duration ttl;
   private final OutboxRecorder events;
+  private final ApplicationEventPublisher notifications;
 
   public OrderService(
       ProductRepository products,
       ReservationRepository orders,
       Clock clock,
       @Value("${app.reservation-ttl:PT15M}") Duration ttl,
-      OutboxRecorder events) {
+      OutboxRecorder events,
+      ApplicationEventPublisher notifications) {
     if (ttl.isNegative() || ttl.isZero())
       throw new IllegalArgumentException("Reservation TTL must be positive");
     this.products = products;
@@ -36,6 +41,7 @@ public class OrderService {
     this.clock = clock;
     this.ttl = ttl;
     this.events = events;
+    this.notifications = notifications;
   }
 
   /** Internal convenience. HTTP clients must supply a stable idempotency key. */
@@ -60,6 +66,7 @@ public class OrderService {
         orders.saveAndFlush(
             new Reservation(owner, key, product, request.quantity(), now, now.plus(ttl)));
     events.record(order);
+    notifications.publishEvent(new OrderChanged(ProductView.from(product), OrderView.from(order)));
     return OrderView.from(order);
   }
 
@@ -140,6 +147,7 @@ public class OrderService {
     else product.release(order.quantity());
     order.transitionTo(target);
     events.record(order);
+    notifications.publishEvent(new OrderChanged(ProductView.from(product), OrderView.from(order)));
     return OrderView.from(order);
   }
 }
