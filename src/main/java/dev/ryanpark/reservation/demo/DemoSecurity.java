@@ -12,7 +12,7 @@ import org.springframework.security.web.SecurityFilterChain;
 public class DemoSecurity {
   @Bean
   @Order(1)
-  SecurityFilterChain demoSecurity(HttpSecurity http) throws Exception {
+  SecurityFilterChain demoFilterChain(HttpSecurity http) throws Exception {
     return http.securityMatcher(
             "/", "/demo.html", "/demo.js", "/demo-client.js", "/demo.css", "/api/demo/**")
         .authorizeHttpRequests(auth -> auth.anyRequest().permitAll())
