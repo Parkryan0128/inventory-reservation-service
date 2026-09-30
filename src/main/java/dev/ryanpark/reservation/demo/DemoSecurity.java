@@ -13,12 +13,17 @@ public class DemoSecurity {
   @Bean
   @Order(1)
   SecurityFilterChain demoSecurity(HttpSecurity http) throws Exception {
-    return http.securityMatcher("/", "/demo.html", "/demo.js", "/demo-client.js", "/demo.css", "/api/demo/**")
+    return http.securityMatcher(
+            "/", "/demo.html", "/demo.js", "/demo-client.js", "/demo.css", "/api/demo/**")
         .authorizeHttpRequests(auth -> auth.anyRequest().permitAll())
         .requestCache(cache -> cache.disable())
         .logout(logout -> logout.disable())
-        .headers(headers -> headers.contentSecurityPolicy(csp -> csp.policyDirectives(
-            "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")))
+        .headers(
+            headers ->
+                headers.contentSecurityPolicy(
+                    csp ->
+                        csp.policyDirectives(
+                            "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")))
         .build();
   }
 }

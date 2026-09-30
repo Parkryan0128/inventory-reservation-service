@@ -27,8 +27,10 @@ class DemoDisabledTest {
     assertThat(context.getBeansOfType(DemoController.class)).isEmpty();
     assertThat(context.getBeansOfType(DemoService.class)).isEmpty();
     mvc.perform(get("/api/demo/status")).andExpect(status().isUnauthorized());
-    mvc.perform(post("/api/demo/run/race").with(user("admin").roles("ADMIN", "CUSTOMER")).with(csrf()))
+    mvc.perform(
+            post("/api/demo/run/race").with(user("admin").roles("ADMIN", "CUSTOMER")).with(csrf()))
         .andExpect(status().isNotFound());
-    mvc.perform(get("/demo.html").with(user("admin").roles("ADMIN", "CUSTOMER"))).andExpect(status().isForbidden());
+    mvc.perform(get("/demo.html").with(user("admin").roles("ADMIN", "CUSTOMER")))
+        .andExpect(status().isForbidden());
   }
 }

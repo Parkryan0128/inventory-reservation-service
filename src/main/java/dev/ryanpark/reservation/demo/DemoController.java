@@ -26,8 +26,11 @@ public class DemoController {
   private final JdbcTemplate jdbc;
   private final boolean eventsEnabled;
 
-  public DemoController(DemoService demo, OutboxRepository outbox,
-      ProcessedEventRepository receipts, JdbcTemplate jdbc,
+  public DemoController(
+      DemoService demo,
+      OutboxRepository outbox,
+      ProcessedEventRepository receipts,
+      JdbcTemplate jdbc,
       @Value("${app.events.enabled:false}") boolean eventsEnabled) {
     this.demo = demo;
     this.outbox = outbox;
@@ -44,11 +47,23 @@ public class DemoController {
   @GetMapping("/api/demo/status")
   public Map<String, Object> status(HttpServletRequest request) {
     requireLocal(request);
-    var database = jdbc.execute((ConnectionCallback<String>) connection ->
-        connection.getMetaData().getDatabaseProductName());
-    return Map.of("busy", demo.busy(), "scenarios", DemoService.SCENARIOS,
-        "database", database, "eventsEnabled", eventsEnabled,
-        "pendingEvents", outbox.countByPublishedAtIsNull(), "auditReceipts", receipts.count());
+    var database =
+        jdbc.execute(
+            (ConnectionCallback<String>)
+                connection -> connection.getMetaData().getDatabaseProductName());
+    return Map.of(
+        "busy",
+        demo.busy(),
+        "scenarios",
+        DemoService.SCENARIOS,
+        "database",
+        database,
+        "eventsEnabled",
+        eventsEnabled,
+        "pendingEvents",
+        outbox.countByPublishedAtIsNull(),
+        "auditReceipts",
+        receipts.count());
   }
 
   @PostMapping("/api/demo/run/{scenario}")

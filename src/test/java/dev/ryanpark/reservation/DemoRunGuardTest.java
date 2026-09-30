@@ -21,23 +21,30 @@ class DemoRunGuardTest {
     var catalog = mock(CatalogService.class);
     var entered = new CountDownLatch(1);
     var release = new CountDownLatch(1);
-    when(catalog.create(any())).thenAnswer(invocation -> {
-      entered.countDown();
-      if (!release.await(5, TimeUnit.SECONDS)) throw new IllegalStateException("Test release timed out");
-      throw new IllegalStateException("Database unavailable");
-    });
-    var demo = new DemoService(catalog, mock(OrderService.class), mock(JdbcTemplate.class), Clock.systemUTC());
+    when(catalog.create(any()))
+        .thenAnswer(
+            invocation -> {
+              entered.countDown();
+              if (!release.await(5, TimeUnit.SECONDS))
+                throw new IllegalStateException("Test release timed out");
+              throw new IllegalStateException("Database unavailable");
+            });
+    var demo =
+        new DemoService(
+            catalog, mock(OrderService.class), mock(JdbcTemplate.class), Clock.systemUTC());
     try (var worker = Executors.newSingleThreadExecutor()) {
       var first = worker.submit(() -> demo.run("contention"));
       try {
         assertThat(entered.await(5, TimeUnit.SECONDS)).isTrue();
         assertThat(demo.busy()).isTrue();
-        assertThatThrownBy(() -> demo.run("race")).isInstanceOfSatisfying(ApiException.class,
-            ex -> assertThat(ex.code()).isEqualTo("DEMO_BUSY"));
+        assertThatThrownBy(() -> demo.run("race"))
+            .isInstanceOfSatisfying(
+                ApiException.class, ex -> assertThat(ex.code()).isEqualTo("DEMO_BUSY"));
       } finally {
         release.countDown();
       }
-      assertThatThrownBy(() -> first.get(5, TimeUnit.SECONDS)).hasCauseInstanceOf(IllegalStateException.class);
+      assertThatThrownBy(() -> first.get(5, TimeUnit.SECONDS))
+          .hasCauseInstanceOf(IllegalStateException.class);
     }
     assertThat(demo.busy()).isFalse();
     assertThatThrownBy(() -> demo.run("race")).isInstanceOf(IllegalStateException.class);
