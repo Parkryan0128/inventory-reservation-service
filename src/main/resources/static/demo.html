@@ -12,7 +12,6 @@
   <main>
     <header class="page-header">
       <div><h1>Inventory Reservation System</h1><p>Backend dashboard <span aria-hidden="true">/</span> Spring Boot · PostgreSQL · Redis</p></div>
-      <span id="connection" role="status">Connecting…</span>
     </header>
     <section class="product panel" aria-label="Product and inventory">
       <div class="product-art" aria-hidden="true"><div class="gpu"><div class="fan"></div><div class="fan"></div><span>VECTOR / 01</span><div class="contacts"></div></div></div>
@@ -30,7 +29,7 @@
       <button type="button" data-scenario="expiry" aria-pressed="false">Reservation expiry</button>
     </nav>
     <section class="scenario panel" aria-labelledby="scenario-title">
-      <div class="section-heading"><h2 id="scenario-title">Concurrent reservations</h2><span id="phase" role="status">Ready</span></div>
+      <div class="section-heading"><h2 id="scenario-title">Concurrent reservations</h2></div>
       <p id="description"></p>
       <dl id="configuration" class="configuration"></dl>
       <div class="explanation"><div><h3>What this tests</h3><p id="mechanism"></p></div><div><h3>Expected result</h3><p id="expected"></p></div></div>
@@ -44,10 +43,9 @@
         <label>Filter <select id="filter"><option value="all">All entries</option><option value="ok">Successful calls</option><option value="rejected">Rejected calls</option><option value="snapshot">Inventory snapshots</option></select></label>
         <label class="follow"><input type="checkbox" id="follow" checked /> Follow log</label>
       </div>
-      <div id="log" class="log" tabindex="0" role="region" aria-label="Recorded backend activity" aria-describedby="log-note"><p id="log-placeholder">Run a scenario to record backend activity.</p><div id="log-lines"></div></div>
+      <div id="log" class="log" tabindex="0" role="region" aria-label="Recorded backend activity"><p id="log-placeholder">Run a scenario to record backend activity.</p><div id="log-lines"></div></div>
       <div class="terminal-footer"><span id="log-progress" role="status">0 entries</span><span id="log-counts">0 successful · 0 rejected</span></div>
     </section>
-    <p id="log-note" class="log-note">Server-recorded service results, replayed for readability. Not a live HTTP or SQL trace. Timestamps are UTC; playback speed does not change server execution.</p>
     <section id="result" class="panel results" hidden aria-labelledby="result-title">
       <div class="section-heading"><h2 id="result-title">Result</h2><span id="verification" role="status"></span></div>
       <dl id="metrics" class="metrics"></dl>
@@ -55,8 +53,6 @@
       <p id="record-metadata" class="metadata"></p>
     </section>
     <p id="error" class="error" role="alert" hidden></p>
-    <details class="panel technical"><summary>Technical details</summary><div class="technical-content"><p id="technical-note">One browser request starts a scenario. Server workers call the same transactional services used by the normal API.</p><p id="events"></p><details><summary>Raw response</summary><pre id="raw">No response yet.</pre></details></div></details>
-    <footer><span>Local demo · simulated payments · generated data remains in the database</span><a href="/index.html">Manual API workspace</a></footer>
   </main>
 </body>
 </html>

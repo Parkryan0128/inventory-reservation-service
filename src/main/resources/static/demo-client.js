@@ -107,6 +107,8 @@ export function inventoryAt(r, entries) {
   return { inventory, source };
 }
 
+export const replayDelays = Object.freeze({ slow: 200, normal: 40, fast: 12 });
+
 export class Replay {
   constructor(onEntry, onChange, schedule = (fn, ms) => globalThis.setTimeout(fn, ms), cancel = id => globalThis.clearTimeout(id)) {
     this.onEntry = onEntry;
@@ -118,13 +120,25 @@ export class Replay {
     this.state = "idle";
     this.timer = null;
     this.generation = 0;
-    this.delay = () => 40;
+    this.speed = "normal";
   }
-  stop() {
+  cancelPending() {
     this.generation++;
     if (this.timer !== null) this.cancel(this.timer);
     this.timer = null;
+  }
+  stop() {
+    this.cancelPending();
     this.state = "idle";
+  }
+  setSpeed(speed) {
+    if (!Object.hasOwn(replayDelays, speed)) throw new RangeError("Unknown playback speed.");
+    if (this.speed === speed) return;
+    this.speed = speed;
+    if (this.state === "playing") {
+      this.cancelPending();
+      this.next();
+    }
   }
   load(entries) {
     this.stop();
@@ -140,6 +154,7 @@ export class Replay {
     this.next();
   }
   next() {
+    if (this.state !== "playing" || this.timer !== null) return;
     const generation = this.generation;
     this.timer = this.schedule(() => {
       if (generation !== this.generation || this.state !== "playing") return;
@@ -149,7 +164,7 @@ export class Replay {
       if (this.position === this.entries.length) this.state = "complete";
       this.onChange(this);
       if (this.state === "playing") this.next();
-    }, this.delay());
+    }, replayDelays[this.speed]);
   }
   pause() {
     if (this.state !== "playing") return;

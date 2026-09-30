@@ -46,11 +46,7 @@ let connected = false;
 let serverBusy = false;
 let shown = [];
 const replay = new Replay(appendEntry, playbackChanged);
-replay.delay = () => {
-  if ($("speed").value === "fast") return 12;
-  if ($("speed").value === "slow") return 200;
-  return result?.activity.length > 25 ? 40 : 220;
-};
+replay.setSpeed($("speed").value);
 
 function element(tag, text, className) {
   const node = document.createElement(tag);
@@ -72,6 +68,7 @@ function inventory(p, caption) {
 function controls() {
   $("run").disabled = busy || !connected || serverBusy || replay.state === "playing";
   $("run").textContent = busy ? "Running…" : "Run scenario";
+  $("run").title = !connected ? "Backend unavailable" : serverBusy ? "Another scenario is running" : "";
   document.querySelectorAll("[data-scenario]").forEach(b => { b.disabled = busy; });
   $("pause").disabled = !result || busy || replay.state === "complete" || replay.state === "idle";
   $("pause").textContent = replay.state === "playing" ? "Pause" : "Resume";
@@ -81,11 +78,11 @@ function controls() {
 function clearLog() {
   shown = [];
   $("log-lines").replaceChildren();
+  $("log").scrollTop = 0;
   $("log-placeholder").hidden = false;
   $("log-placeholder").textContent = "Run a scenario to record backend activity.";
   $("log-progress").textContent = "0 entries";
   $("log-counts").textContent = "0 successful · 0 rejected";
-  $("follow").checked = true;
 }
 function choose(name) {
   if (busy) return;
@@ -96,10 +93,7 @@ function choose(name) {
   $("filter").value = "all";
   $("result").hidden = true;
   $("error").hidden = true;
-  $("raw").textContent = "No response yet.";
-  $("phase").textContent = "Ready";
   $("playback-state").textContent = "No recording";
-  $("technical-note").textContent = "One browser request starts the scenario. Server workers invoke real transactional services. Activity rows describe service results, not HTTP response codes or SQL lock events.";
   const preset = presets[name];
   $("scenario-title").textContent = preset.title;
   $("description").textContent = preset.description;
@@ -169,7 +163,6 @@ function playbackChanged(player) {
   if (!result) return;
   const complete = player.state === "complete";
   $("playback-state").textContent = complete ? "Recording complete" : player.state === "playing" ? "Replaying recorded results" : "Replay paused";
-  $("phase").textContent = complete ? "Completed" : player.state === "playing" ? "Replaying" : "Paused";
   if (complete) showResult();
   controls();
 }
@@ -179,29 +172,25 @@ function startReplay() {
   clearLog();
   $("result").hidden = true;
   inventory(result.snapshots[0].inventory, `First recorded snapshot · ${result.snapshots[0].label}`);
+  replay.setSpeed($("speed").value);
   replay.load(result.activity);
-  if (matchMedia("(prefers-reduced-motion: reduce)").matches) replay.finish();
-  else replay.play();
+  replay.play();
 }
 async function run() {
   if (busy || !connected || serverBusy || replay.state === "playing") return;
   choose(selected);
   busy = true;
   controls();
-  $("phase").textContent = "Running on server";
   $("playback-state").textContent = "Waiting for server";
   $("log-placeholder").textContent = "> Executing scenario. Waiting for recorded backend results…";
   try {
     const [recorded] = await client.run([selected]);
     result = recorded;
-    $("raw").textContent = JSON.stringify(result, null, 2);
-    $("technical-note").textContent = result.note;
     busy = false;
     startReplay();
   } catch (error) {
     result = null;
     replay.stop();
-    $("phase").textContent = "Error";
     $("playback-state").textContent = "No verified recording";
     $("log-placeholder").textContent = `> ERROR: ${error.message}`;
     $("error").textContent = `${error.message} A failed response does not mean all database work was rolled back. Running again creates fresh data.`;
@@ -217,16 +206,9 @@ async function refreshStatus() {
     const status = await client.status();
     connected = true;
     serverBusy = status.busy;
-    $("connection").textContent = `${status.database} · ${serverBusy ? "Busy" : "Connected"}`;
-    $("connection").className = "online";
-    $("events").textContent = status.eventsEnabled
-      ? `Kafka enabled. Application-wide outbox: ${status.pendingEvents} pending; ${status.auditReceipts} audit receipts. These counters are not per-scenario results.`
-      : "Kafka delivery is disabled. The scenarios use the reservation service and database. Redis caches product metadata, not inventory counts.";
   } catch {
     connected = false;
     serverBusy = false;
-    $("connection").textContent = "Backend unreachable · retrying";
-    $("connection").className = "offline";
   }
   controls();
 }
@@ -234,6 +216,7 @@ $("run").addEventListener("click", run);
 $("pause").addEventListener("click", () => replay.state === "playing" ? replay.pause() : replay.play());
 $("skip").addEventListener("click", () => { if (result && !busy) replay.finish(); });
 $("replay").addEventListener("click", startReplay);
+$("speed").addEventListener("change", () => replay.setSpeed($("speed").value));
 $("filter").addEventListener("change", () => {
   [...$("log-lines").children].forEach((row, i) => { row.hidden = !matches(shown[i]); });
 });
