@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="description" content="Backend inventory dashboard: run reservation scenarios and inspect recorded service activity." />
+  <meta name="description" content="Backend inventory dashboard for concurrent reservations and order transitions." />
   <title>Inventory Reservation System</title>
   <link rel="stylesheet" href="/demo.css" />
   <script type="module" src="/demo.js"></script>
@@ -11,48 +11,95 @@
 <body>
   <main>
     <header class="page-header">
-      <div><h1>Inventory Reservation System</h1><p>Backend dashboard <span aria-hidden="true">/</span> Spring Boot · PostgreSQL · Redis</p></div>
+      <h1>Inventory Reservation System</h1>
+      <p>Backend inventory dashboard · Spring Boot · PostgreSQL · Redis</p>
     </header>
-    <section class="product panel" aria-label="Product and inventory">
-      <div class="product-art" aria-hidden="true"><div class="gpu"><div class="fan"></div><div class="fan"></div><span>VECTOR / 01</span><div class="contacts"></div></div></div>
-      <div class="product-name"><h2>Vector One</h2><p>Graphics card · CA$899.00</p><small>Fictional product · isolated test data</small></div>
-      <div class="inventory">
-        <div class="stock"><div><span>Available</span><strong id="available">5</strong></div><div><span>Reserved</span><strong id="reserved">0</strong></div><div><span>Sold</span><strong id="sold">0</strong></div></div>
-        <p id="stock-caption">Preset preview · no database changes yet.</p>
-      </div>
-    </section>
-    <nav class="tabs" aria-label="Scenarios">
-      <button type="button" data-scenario="contention" aria-pressed="true">Concurrent reservations</button>
-      <button type="button" data-scenario="idempotency" aria-pressed="false">Duplicate requests</button>
-      <button type="button" data-scenario="race" aria-pressed="false">Payment vs cancel</button>
-      <button type="button" data-scenario="lifecycle" aria-pressed="false">Order lifecycle</button>
-      <button type="button" data-scenario="expiry" aria-pressed="false">Reservation expiry</button>
-    </nav>
-    <section class="scenario panel" aria-labelledby="scenario-title">
-      <div class="section-heading"><h2 id="scenario-title">Concurrent reservations</h2></div>
-      <p id="description"></p>
-      <dl id="configuration" class="configuration"></dl>
-      <div class="explanation"><div><h3>What this tests</h3><p id="mechanism"></p></div><div><h3>Expected result</h3><p id="expected"></p></div></div>
-      <div class="run-bar"><button type="button" id="run" class="primary" disabled>Run scenario</button><span>Fresh product each run. No login or manual setup.</span></div>
-    </section>
-    <section class="terminal" aria-labelledby="activity-title">
-      <div class="terminal-header"><h2 id="activity-title">Backend activity</h2><span id="playback-state" role="status">No recording</span></div>
-      <div class="terminal-controls">
-        <button type="button" id="pause" disabled>Pause</button><button type="button" id="skip" disabled>Show all</button><button type="button" id="replay" disabled>Replay</button>
-        <label>Speed <select id="speed"><option value="normal">Normal</option><option value="fast">Fast</option><option value="slow">Slow</option></select></label>
-        <label>Filter <select id="filter"><option value="all">All entries</option><option value="ok">Successful calls</option><option value="rejected">Rejected calls</option><option value="snapshot">Inventory snapshots</option></select></label>
-        <label class="follow"><input type="checkbox" id="follow" checked /> Follow log</label>
-      </div>
-      <div id="log" class="log" tabindex="0" role="region" aria-label="Recorded backend activity"><p id="log-placeholder">Run a scenario to record backend activity.</p><div id="log-lines"></div></div>
-      <div class="terminal-footer"><span id="log-progress" role="status">0 entries</span><span id="log-counts">0 successful · 0 rejected</span></div>
-    </section>
-    <section id="result" class="panel results" hidden aria-labelledby="result-title">
-      <div class="section-heading"><h2 id="result-title">Result</h2><span id="verification" role="status"></span></div>
-      <dl id="metrics" class="metrics"></dl>
-      <div class="result-detail"><div><h3>Recorded inventory</h3><table><thead><tr><th scope="col">State</th><th scope="col">Before</th><th scope="col">After</th></tr></thead><tbody id="stock-table"></tbody></table></div><div><h3>Checks</h3><ul id="assertions"></ul></div></div>
-      <p id="record-metadata" class="metadata"></p>
-    </section>
-    <p id="error" class="error" role="alert" hidden></p>
+
+    <div class="dashboard">
+      <aside class="sidebar">
+        <section class="product panel" aria-label="Product and inventory">
+          <div class="product-summary">
+            <div class="product-art" aria-hidden="true">
+              <div class="gpu"><div class="fan"></div><div class="fan"></div><span>VECTOR / 01</span><div class="contacts"></div></div>
+            </div>
+            <div class="product-name">
+              <h2>Vector One</h2>
+              <p>Graphics card</p>
+              <strong>CA$899.00</strong>
+            </div>
+          </div>
+          <div class="stock" aria-label="Inventory">
+            <div><span>Available</span><strong id="available">5</strong></div>
+            <div><span>Reserved</span><strong id="reserved">0</strong></div>
+            <div><span>Sold</span><strong id="sold">0</strong></div>
+          </div>
+          <p id="stock-caption" class="stock-caption">Preset stock</p>
+        </section>
+
+        <nav class="scenario-nav panel" aria-label="Scenarios">
+          <h2>Scenarios</h2>
+          <button type="button" data-scenario="contention" aria-pressed="true">Concurrent reservations</button>
+          <button type="button" data-scenario="idempotency" aria-pressed="false">Duplicate requests</button>
+          <button type="button" data-scenario="race" aria-pressed="false">Payment vs cancel</button>
+          <button type="button" data-scenario="lifecycle" aria-pressed="false">Order lifecycle</button>
+          <button type="button" data-scenario="expiry" aria-pressed="false">Reservation expiry</button>
+        </nav>
+
+        <section class="scenario panel" aria-labelledby="scenario-title">
+          <h2 id="scenario-title">Concurrent reservations</h2>
+          <p id="description" class="scenario-description"></p>
+          <dl id="configuration" class="configuration"></dl>
+          <div class="scenario-copy">
+            <h3>Tests</h3>
+            <p id="mechanism"></p>
+          </div>
+          <div class="scenario-copy expected">
+            <h3>Expected</h3>
+            <p id="expected"></p>
+          </div>
+          <button type="button" id="run" class="primary" disabled>Run scenario</button>
+        </section>
+      </aside>
+
+      <section class="main-column">
+        <section class="terminal" aria-labelledby="activity-title">
+          <div class="terminal-header">
+            <h2 id="activity-title">Backend activity</h2>
+            <span id="playback-state" role="status">No recording</span>
+          </div>
+          <div class="terminal-controls">
+            <button type="button" id="pause" hidden disabled>Pause</button>
+            <button type="button" id="skip" hidden disabled>Show all</button>
+            <button type="button" id="replay" hidden disabled>Replay</button>
+            <label>Speed <select id="speed"><option value="normal">Normal</option><option value="fast">Fast</option><option value="slow">Slow</option></select></label>
+            <label>Filter <select id="filter"><option value="all">All entries</option><option value="ok">Successful calls</option><option value="rejected">Rejected calls</option><option value="snapshot">Inventory snapshots</option></select></label>
+            <label class="follow"><input type="checkbox" id="follow" checked /> Follow log</label>
+          </div>
+          <div id="log" class="log" tabindex="0" role="region" aria-label="Recorded backend activity">
+            <p id="log-placeholder">Run a scenario to record backend activity.</p>
+            <div id="log-lines"></div>
+          </div>
+          <div class="terminal-footer">
+            <span id="log-progress" role="status">0 entries</span>
+            <span id="log-counts">0 successful · 0 rejected</span>
+          </div>
+        </section>
+
+        <section id="result" class="panel results" hidden aria-labelledby="result-title">
+          <div class="section-heading"><h2 id="result-title">Result</h2><span id="verification" role="status"></span></div>
+          <dl id="metrics" class="metrics"></dl>
+          <div class="result-detail">
+            <div>
+              <h3>Inventory</h3>
+              <table><thead><tr><th scope="col">State</th><th scope="col">Before</th><th scope="col">After</th></tr></thead><tbody id="stock-table"></tbody></table>
+            </div>
+            <div><h3>Checks</h3><ul id="assertions"></ul></div>
+          </div>
+          <p id="record-metadata" class="metadata"></p>
+        </section>
+        <p id="error" class="error" role="alert" hidden></p>
+      </section>
+    </div>
   </main>
 </body>
 </html>

@@ -152,3 +152,32 @@ test("the dashboard omits connection badges, redundant explanations, raw respons
   }
   expect(errors).toEqual([]);
 });
+
+
+test("desktop hierarchy keeps the compact scenario sidebar beside a wider terminal", async ({ page }) => {
+  await ready(page);
+  const sidebar = await page.locator(".sidebar").boundingBox();
+  const terminal = await page.locator(".terminal").boundingBox();
+  expect(sidebar).not.toBeNull();
+  expect(terminal).not.toBeNull();
+  expect(terminal.x).toBeGreaterThan(sidebar.x);
+  expect(terminal.width).toBeGreaterThan(sidebar.width * 1.7);
+  expect(Math.abs(terminal.y - sidebar.y)).toBeLessThan(4);
+  await expect(page.locator("#pause")).toBeHidden();
+  await expect(page.locator("#skip")).toBeHidden();
+  await expect(page.locator("#replay")).toBeHidden();
+
+  await page.locator("#speed").selectOption("fast");
+  await start(page);
+  await expect(page.locator("#pause")).toBeVisible();
+  await expect(page.locator("#skip")).toBeVisible();
+  await expect(page.locator("#replay")).toBeHidden();
+  await page.locator("#skip").click();
+  await expect(page.locator("#pause")).toBeHidden();
+  await expect(page.locator("#skip")).toBeHidden();
+  await expect(page.locator("#replay")).toBeVisible();
+  await expect(page.locator("#result")).toBeVisible();
+  const result = await page.locator("#result").boundingBox();
+  expect(result.x).toBe(terminal.x);
+  expect(result.width).toBe(terminal.width);
+});

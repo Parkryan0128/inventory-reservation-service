@@ -3,38 +3,38 @@ import { DemoClient, Replay, entryLevel, inventoryAt, summarize } from "./demo-c
 const presets = {
   contention: {
     title: "Concurrent reservations", stock: [5, 0, 0],
-    description: "100 customers each try to reserve one unit of the same product. Only 5 units are available. The server submits the calls to a pool of 16 workers so they compete for stock.",
-    config: [["Customers / calls", "100"], ["Server workers", "16"], ["Initial stock", "5 units"], ["Quantity", "1 per call"]],
-    mechanism: "The reservation transaction locks the product row before changing stock. A rejected reservation must not create an order or reduce inventory.",
-    expected: "5 reservations, 95 insufficient-stock rejections and 5 persisted orders. Final stock: 0 available, 5 reserved, 0 sold. Reserved is not yet paid.",
+    description: "100 customers compete for 5 available units.",
+    config: [["Requests", "100"], ["Workers", "16"], ["Stock", "5"], ["Quantity", "1 / request"]],
+    mechanism: "Prevents overselling when concurrent reservations compete for the same inventory.",
+    expected: "5 reserved · 95 rejected · 0 oversold",
   },
   idempotency: {
     title: "Duplicate requests", stock: [10, 0, 0],
-    description: "One customer retries the same 3-unit reservation 16 times with the same idempotency key. After those calls finish, one more call reuses the key but changes the quantity to 4.",
-    config: [["Identical calls", "16"], ["Changed payload", "1 call"], ["Server workers", "16"], ["Initial stock", "10 units"]],
-    mechanism: "The same customer, key and payload must return the same order. A changed payload must be rejected instead of creating another reservation.",
-    expected: "16 replies with one shared order ID, then IDEMPOTENCY_CONFLICT. Only 3 units held. Final stock: 7 available, 3 reserved, 0 sold.",
+    description: "One customer retries the same 3-unit reservation 16 times.",
+    config: [["Identical requests", "16"], ["Workers", "16"], ["Stock", "10"], ["Quantity", "3"]],
+    mechanism: "The same idempotency key must return one order instead of reserving stock repeatedly.",
+    expected: "16 replies · 1 order · 3 units reserved",
   },
   race: {
     title: "Payment vs cancel", stock: [0, 1, 0],
-    description: "Setup reserves the only unit. Two workers then call payment confirmation and cancellation against that same order at the same time.",
-    config: [["Competing calls", "2"], ["Server workers", "2"], ["Shared orders", "1"], ["Starting state", "RESERVED"]],
-    mechanism: "Both operations need the order lock. Only one terminal state can win; the competing operation must not sell and return the same unit.",
-    expected: "One CONFIRMED or CANCELLED result and one INVALID_TRANSITION. Final stock is either 0 / 0 / 1 or 1 / 0 / 0. Either winner is valid.",
+    description: "Payment and cancellation hit the same reserved order at the same time.",
+    config: [["Competing calls", "2"], ["Workers", "2"], ["Orders", "1"], ["Start", "RESERVED"]],
+    mechanism: "Only one terminal transition may change inventory for the order.",
+    expected: "1 transition wins · 1 rejected · 0 double stock movement",
   },
   lifecycle: {
     title: "Order lifecycle", stock: [12, 0, 0],
-    description: "Run three orders sequentially: reserve 3 and confirm payment twice; reserve 2 and cancel twice; reserve 2 and fail payment twice. Each service call appears in the log.",
-    config: [["Orders", "3"], ["Service calls", "9"], ["Execution", "Sequential"], ["Initial stock", "12 units"]],
-    mechanism: "Repeating a terminal operation must be safe. Payment moves reserved stock to sold; cancellation and payment failure return reserved stock to available.",
-    expected: "One CONFIRMED, one CANCELLED and one PAYMENT_FAILED order. Repeated calls do not move stock again. Final stock: 9 available, 0 reserved, 3 sold.",
+    description: "Confirm, cancel, and fail payment while repeating each terminal operation.",
+    config: [["Orders", "3"], ["Service calls", "9"], ["Execution", "Sequential"], ["Stock", "12"]],
+    mechanism: "Repeated terminal operations must not sell or release the same inventory twice.",
+    expected: "9 available · 0 reserved · 3 sold",
   },
   expiry: {
     title: "Reservation expiry", stock: [3, 2, 0],
-    description: "Setup holds 2 of 5 units. First try expiry before the deadline, then advance only this generated order's deadline into the past. Run expiry and repeat it once more.",
-    config: [["Held units", "2 of 5"], ["Expiry calls", "3"], ["Deadline", "Fast-forward fixture"], ["Execution", "Sequential"]],
-    mechanism: "An unexpired reservation must remain held. An expired reservation must release its stock only once. The fixture does not change other orders or the global clock.",
-    expected: "NO_CHANGE → deadline advanced → EXPIRED → NO_CHANGE. Final stock: 5 available, 0 reserved, 0 sold. No two-minute wait or real payment.",
+    description: "An unpaid reservation expires and releases its held stock.",
+    config: [["Held", "2 / 5"], ["Expiry calls", "3"], ["Deadline", "Fast-forward"], ["Execution", "Sequential"]],
+    mechanism: "Expired stock returns once; early or repeated expiry calls must not move it again.",
+    expected: "5 available · 0 reserved · 0 sold",
   },
 };
 const $ = id => document.getElementById(id);
@@ -66,14 +66,19 @@ function inventory(p, caption) {
   $("stock-caption").textContent = caption;
 }
 function controls() {
+  const activePlayback = Boolean(result) && (replay.state === "playing" || replay.state === "paused");
+  const complete = Boolean(result) && replay.state === "complete";
   $("run").disabled = busy || !connected || serverBusy || replay.state === "playing";
   $("run").textContent = busy ? "Running…" : "Run scenario";
   $("run").title = !connected ? "Backend unavailable" : serverBusy ? "Another scenario is running" : "";
   document.querySelectorAll("[data-scenario]").forEach(b => { b.disabled = busy; });
-  $("pause").disabled = !result || busy || replay.state === "complete" || replay.state === "idle";
+  $("pause").hidden = !activePlayback;
+  $("pause").disabled = !activePlayback || busy;
   $("pause").textContent = replay.state === "playing" ? "Pause" : "Resume";
-  $("skip").disabled = !result || busy || replay.state === "complete";
-  $("replay").disabled = !result || busy || replay.state === "playing";
+  $("skip").hidden = !activePlayback;
+  $("skip").disabled = !activePlayback || busy;
+  $("replay").hidden = !complete;
+  $("replay").disabled = !complete || busy;
 }
 function clearLog() {
   shown = [];
