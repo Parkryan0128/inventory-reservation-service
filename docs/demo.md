@@ -1,56 +1,44 @@
-# Inventory Playground
-
-Start Docker Desktop and run from the repository directory:
+# Inventory Reservation Dashboard
 
 ```bash
 docker compose up --build -d
 ```
 
-Open `http://127.0.0.1:8080/`. No account, password, product setup or second browser is needed.
+Open `http://127.0.0.1:8080/`. Choose a scenario and click **Run scenario**. No login, account switching or manual product setup is needed.
 
-## Start with the last five
+The page has a compact product/inventory panel, scenario explanation and configuration, a terminal-style activity log, and a measured result section. The normal account-based workspace remains at `/index.html`.
 
-The first screen shows Vector One, a fictional graphics card, and five available units. Click **Send 100 customers**. The backend creates a fresh product and submits 100 reservation calls, one per generated customer, using 16 server workers. The UI displays one square per actual response: five reservations and 95 insufficient-stock conflicts are the expected result. Selecting a square reveals its response code, measured service-call duration and returned order ID.
+## Scenarios
 
-The inventory panel separates **Available**, **Reserved** and **Sold**. Five reservations means five units are being held for payment, not five completed purchases. Small blocks visualize units in each state; counts and text remain available without relying on color.
-
-## Other situations
-
-The three primary presets are **Flash sale**, **Payment vs cancel**, and **Duplicate request**. Two secondary presets cover **Checkout & returns** and **Abandoned checkout**. Switching a preset is a preview only. The large action button executes that situation; it does not run an unrelated test suite.
-
-| Preset | Actual backend operation | Expected result |
+| Scenario | Workload | Expected result |
 | --- | --- | --- |
-| Flash sale | 100 reservation calls for distinct generated customers; 16 workers; stock 5 | 5 orders, 95 stock conflicts, 0 available / 5 reserved / 0 sold |
-| Payment vs cancel | Reserve one unit, then race payment and cancellation with 2 workers | One terminal transition wins, the other conflicts; inventory matches the winner |
-| Duplicate request | 16 concurrent identical reservations for 3 units, then reuse the key with quantity 4 | One persisted order and 3 held units; the changed payload is rejected |
-| Checkout & returns | Purchase, cancellation and payment failure, repeating each terminal operation | Stock moves once per transition; final inventory 9 available / 0 reserved / 3 sold |
-| Abandoned checkout | Reserve 2 units, advance only this generated order's deadline, invoke normal expiry twice | Both held units return once; final inventory 5 available / 0 reserved / 0 sold |
+| Concurrent reservations | 100 distinct generated customers, 16 server workers, one unit per call, stock 5 | 5 reservations, 95 insufficient-stock rejections, 5 order rows; stock 0 available / 5 reserved / 0 sold |
+| Duplicate requests | 16 concurrent identical calls for 3 units; one changed payload using the same key | 16 replies with one order ID; changed quantity rejected; stock 7 / 3 / 0 |
+| Payment vs cancel | Reserve one unit, then race confirmation against cancellation with 2 workers | One transition wins and one is rejected; stock matches the winner |
+| Order lifecycle | Three orders; repeat confirmation, cancellation and payment failure | Repeated operations do not move stock again; final stock 9 / 0 / 3 |
+| Reservation expiry | Hold 2 of 5 units; try early expiry; advance the generated deadline; expire and retry | NO_CHANGE, EXPIRED, NO_CHANGE; both held units returned once |
 
-The initial figures are labelled **Preset**, not measured stock. When the response returns, **Recorded** snapshots replace the preview. Each run creates new isolated data; earlier products and customer orders are not reset.
+## Reading the terminal
 
-## Follow the stock
+Each log entry is recorded on the server. Concurrent workers append their results after the real Spring-proxied transactional service returns. Entries include a monotonically increasing sequence, UTC observation timestamp, request ID, actor label, operation, returned status, measured service-call duration, quantity, idempotency key and returned order ID. Hover over a row to inspect the full order ID.
 
-After execution, click the recorded snapshot steps to see the exact inventory captured at that point. **Replay stock changes** steps through those same snapshots at a presentation pace; it sends no API writes and can be paused. Changing presets or starting another run stops the replay and clears the previous recording.
+The server returns the completed recording; the browser reveals it progressively. **Replaying recorded results** identifies this presentation phase. It is not a live WebSocket/SSE stream, HTTP access log, SQL trace, lock-wait profiler or reconstructed database commit order. Service calls are not labelled with invented HTTP 201/409 statuses. A worker can be descheduled between commit and recording, so a rejection can appear before an earlier successful transaction's result. Successes are never sorted to the top.
 
-This is not a fabricated animation or live database trace. Concurrent response squares are shown in request-number order, **not** completion or commit order. Their durations measure the service invocation, including its transaction, not HTTP latency or separately instrumented lock-wait time. Intermediate stock states that were not captured are not invented. Results are historical snapshots: the normal scheduler can subsequently expire unpaid demo reservations.
+**OK** means the service returned normally, including a PAYMENT_FAILED terminal state. **REJECT** is an expected domain conflict. **INFO** includes captured inventory and expiry no-ops. Infrastructure errors stop the run and appear as errors, not stock rejections or successful checks.
 
-**Under the hood** contains the execution note, persisted order count, assertions, duration, product ID, completion time and raw response. Infrastructure errors are not classified as stock conflicts, and a failed assertion never produces a success headline. A failed or timed-out response does not imply all database work was rolled back; another run creates a fresh fixture.
+Use **Pause/Resume**, **Show all**, **Replay**, speed selection, and filters to inspect the recording. These controls never submit new backend writes. Scrolling up with a mouse wheel or navigation keys turns off **Follow log**; it can also be unchecked directly. Reduced-motion preferences show the complete recording immediately.
 
-## Scope and safety
+During concurrent reservation and duplicate-request playback, the product counters are explicitly labelled **Derived from replayed responses** when calculated from unique successful order IDs and quantities. They are not intermediate database reads. At a recorded snapshot, actual database values replace that calculation. Other scenarios update inventory only at recorded snapshot markers. The result table always compares actual recorded database snapshots. For payment/cancel and expiry, the first snapshot is after setup has reserved stock.
 
-The demo invokes the same Spring-proxied transactional services as the ordinary API. There are 100 service calls and 16 worker threads in the flash sale, not 100 simultaneous browser connections. Database parallelism is also bounded by the connection pool. `scripts/contention.py` remains available for separate end-to-end HTTP measurements.
+Results are historical. The normal scheduler may subsequently expire unpaid reservations. Every run creates a new product and isolated owner; previous data is not reset. Generated rows remain in the local database. A failed or timed-out response does not prove all work was rolled back.
 
-Expiry advances only its own generated order's deadline, not the global clock. It exercises the normal expiry service without waiting for the scheduler. Payments are simulated; no money is charged.
+## Execution and safety
 
-Demo controllers and their public security chain exist only under the `demo` profile. POSTs still require a CSRF token, retrieved automatically. Hostnames must be loopback names, and Compose binds to `127.0.0.1`. This intentionally unauthenticated feature is for **local use only**; the hostname check is not public-deployment authentication. Do not expose the demo profile to the internet.
+The concurrency workload is 100 service calls on 16 workers, not 100 simultaneous HTTP connections. Database concurrency is also bounded by the connection pool. Use `scripts/contention.py` for separate end-to-end HTTP measurements. The expiry fixture moves only its generated order's deadline into the past and invokes the real expiry service; it does not change the application clock or claim to test scheduler timing.
 
-Fixed presets bound the workload. Server-side exclusion and disabled browser controls prevent overlapping runs. The worker guard releases on failure only after workers terminate. Generated rows remain in the local database.
+The demo API exists only under the `demo` profile. It keeps CSRF protection, checks the loopback hostname, limits runs to fixed scenarios, and allows one scenario at a time. Compose binds to `127.0.0.1`. Keep this intentionally unauthenticated profile local; the hostname guard is not public-deployment authentication. Normal product, order and admin APIs retain their authentication, role and ownership checks.
 
-The original account-based manual workspace remains at `/index.html`; normal `/api/products`, `/api/orders` and `/api/admin/**` authentication, ownership, roles and CSRF protections are unchanged. No credentials are embedded in the playground.
-
-## Optional events
-
-Kafka is not required to run these scenarios. The expandable backend details report application-wide outbox/audit counts, not a per-scenario event guarantee. Enable delivery with:
+Redis caches metadata, not live inventory. Optional Kafka/outbox counts are application-wide observations rather than per-scenario assertions. Enable Kafka with:
 
 ```bash
 docker compose -f compose.yml -f compose.events.yml --profile events up --build -d
@@ -62,9 +50,7 @@ docker compose -f compose.yml -f compose.events.yml --profile events up --build 
 npm test
 ./mvnw test
 ./mvnw verify
-npm ci
-npx playwright install chromium
 npm run test:browser
 ```
 
-`verify` runs the Java scenario tests against real PostgreSQL through Testcontainers as well as the default H2 tests. Assertions independently inspect persisted stock and orders, recorded request histograms, timing field validity, fresh fixtures, isolated expiry, competing transitions and security boundaries. JavaScript tests cover execution guards, transport errors, record validation and summaries. Browser acceptance runs each preset against Compose, inspects returned order IDs, replays snapshots without writes, verifies failures and retry behavior, checks double-click exclusion and mobile layout, and retains desktop/mobile screenshots as CI artifacts.
+Java tests check real outcomes and persisted rows against H2 and PostgreSQL, including the activity sequence, order IDs, repeated transitions and expiry no-ops. JavaScript tests cover response validation, stock derivation, duplicate-order handling, paused/resumed playback, stale callback cancellation and errors. Browser tests run against Compose and verify progressive logs, order preservation, filtering, replay without writes, fresh reruns, errors, mobile layout, reduced motion and the original workspace.

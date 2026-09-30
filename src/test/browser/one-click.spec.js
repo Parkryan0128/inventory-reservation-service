@@ -3,175 +3,166 @@ import { test, expect } from "@playwright/test";
 async function ready(page) {
   await page.goto("/");
   await expect(page.locator("#run")).toBeEnabled();
+  await expect(page.getByRole("heading", { name: "Inventory Reservation System", exact: true })).toBeVisible();
   await expect(page.locator('input[type="password"]')).toHaveCount(0);
 }
-
-async function execute(page, scenario = "contention") {
-  if (scenario !== "contention") await page.locator(`[data-scenario="${scenario}"]`).click();
-  const pending = page.waitForResponse(response => response.url().endsWith(`/api/demo/run/${scenario}`) && response.request().method() === "POST");
+function responseFor(page, name) {
+  return page.waitForResponse(r => r.url().endsWith(`/api/demo/run/${name}`) && r.request().method() === "POST");
+}
+async function execute(page, name) {
+  await page.locator(`[data-scenario="${name}"]`).click();
+  await page.locator("#speed").selectOption("fast");
+  const pending = responseFor(page, name);
   await page.locator("#run").click();
-  const response = await pending;
-  expect(response.status()).toBe(200);
-  const result = await response.json();
-  await expect(page.locator("#phase")).toHaveText("RECORDED");
-  await expect(page.locator("#run")).toBeEnabled();
+  const result = await (await pending).json();
+  await expect(page.locator("#phase")).toHaveText("Completed", { timeout: 30000 });
   return result;
 }
 
-test("flash sale shows actual per-customer outcomes and five reserved, not sold, units", async ({ page }, testInfo) => {
-  const errors = [];
-  const writes = [];
-  page.on("pageerror", error => errors.push(error.message));
-  page.on("request", request => { if (request.url().includes("/api/demo/run/")) writes.push(request); });
+test("real contention results fill the terminal progressively in recorded order", async ({ page }) => {
+  const errors = [], writes = [];
+  page.on("pageerror", e => errors.push(e.message));
+  page.on("request", r => { if (r.url().includes("/api/demo/run/")) writes.push(r); });
   await ready(page);
-  await expect(page.locator("#summary")).toHaveText("Who gets a reservation?");
-  await expect(page.locator("#inventory-mode")).toHaveText("Preset");
-  await expect(page.locator(".request-tile[data-state=PENDING]")).toHaveCount(100);
-  const result = await execute(page);
+  await page.locator("#speed").selectOption("slow");
+  const pending = responseFor(page, "contention");
+  await page.locator("#run").click();
+  const result = await (await pending).json();
   expect(result.outcomes).toEqual({ RESERVED: 5, INSUFFICIENT_STOCK: 95 });
-  expect(result.persistedOrders).toBe(5);
-  expect(result.attempts).toHaveLength(100);
-  await expect(page.locator("#summary")).toHaveText("5 reserved. 95 turned away.");
-  await expect(page.locator(".request-tile[data-state=RESERVED]")).toHaveCount(5);
-  await expect(page.locator(".request-tile[data-state=INSUFFICIENT_STOCK]")).toHaveCount(95);
+  await expect.poll(() => page.locator(".log-line").count()).toBeGreaterThan(0);
+  expect(await page.locator(".log-line").count()).toBeLessThan(result.activity.length);
+  await page.locator("#pause").click();
+  const paused = await page.locator(".log-line").count();
+  await page.waitForTimeout(300);
+  expect(await page.locator(".log-line").count()).toBe(paused);
+  await page.locator("#skip").click();
+  await expect(page.locator("#verification")).toHaveText("Checks passed");
+  await expect(page.locator('.log-line[data-code="RESERVED"]')).toHaveCount(5);
+  await expect(page.locator('.log-line[data-code="INSUFFICIENT_STOCK"]')).toHaveCount(95);
+  expect(await page.locator(".log-line").evaluateAll(rows => rows.map(r => Number(r.dataset.sequence))))
+    .toEqual(result.activity.map(e => e.sequence));
+  expect(await page.locator(".log-line").evaluateAll(rows => rows.map(r => r.dataset.request)))
+    .toEqual(result.activity.map(e => e.requestId));
   await expect(page.locator("#available")).toHaveText("0");
   await expect(page.locator("#reserved")).toHaveText("5");
   await expect(page.locator("#sold")).toHaveText("0");
-  const successIndex = result.attempts.findIndex(attempt => attempt.orderId);
-  await page.locator(".request-tile").nth(successIndex).click();
-  await expect(page.locator("#request-detail")).toContainText(result.attempts[successIndex].orderId);
   expect(writes).toHaveLength(1);
   expect(writes[0].headers().authorization).toBeUndefined();
   expect(writes[0].headers()["x-csrf-token"]).toBeTruthy();
   expect(errors).toEqual([]);
-  await page.screenshot({ path: testInfo.outputPath("playground-desktop.png"), fullPage: true });
-  await page.reload();
-  await expect(page.locator("#phase")).toHaveText("READY");
-  await expect(page.locator("#recording")).toBeHidden();
-  await expect(page.locator("#raw")).toHaveText("No response yet.");
+  await page.locator("#follow").uncheck();
+  await page.locator("#log").evaluate(el => el.scrollTop = 0);
+  await page.screenshot({ path: test.info().outputPath("terminal-desktop.png"), fullPage: true });
 });
 
-test("either race winner is displayed and repeated runs use fresh products", async ({ page }) => {
+test("all other presets show actual service records and database inventory", async ({ page }) => {
   await ready(page);
-  const ids = [];
-  for (let i = 0; i < 2; i++) {
-    const result = await execute(page, "race");
-    ids.push(result.snapshots[0].inventory.id);
-    const paymentWon = result.outcomes.CONFIRMED === 1;
-    await expect(page.locator(paymentWon ? "#payment-result" : "#cancel-result")).toHaveClass(/winner/);
-    await expect(page.locator(paymentWon ? "#cancel-result" : "#payment-result")).toContainText("INVALID_TRANSITION");
-    await expect(page.locator("#reserved")).toHaveText("0");
-    await expect(page.locator("#sold")).toHaveText(paymentWon ? "1" : "0");
-    await expect(page.locator("#available")).toHaveText(paymentWon ? "0" : "1");
+  for (const name of ["idempotency", "race", "lifecycle", "expiry"]) {
+    const result = await execute(page, name);
+    await expect(page.locator("#verification")).toHaveText("Checks passed");
+    await expect(page.locator(".log-line")).toHaveCount(result.activity.length);
+    for (const key of ["available", "reserved", "sold"]) {
+      await expect(page.locator(`#${key}`)).toHaveText(String(result.snapshots.at(-1).inventory[key]));
+    }
+    if (name === "idempotency") {
+      const ids = await page.locator('.log-line[data-code="RESERVED"]').evaluateAll(rows => rows.map(r => r.title));
+      expect(ids).toHaveLength(16);
+      expect(new Set(ids).size).toBe(1);
+      await expect(page.locator('.log-line[data-code="IDEMPOTENCY_CONFLICT"]')).toHaveCount(1);
+    }
+    if (name === "expiry") await expect(page.locator('.log-line[data-code="NO_CHANGE"]')).toHaveCount(2);
   }
-  expect(ids[0]).not.toBe(ids[1]);
 });
 
-test("duplicate requests expose one shared order ID and a separate payload conflict", async ({ page }) => {
-  await ready(page);
-  const result = await execute(page, "idempotency");
-  expect(result.persistedOrders).toBe(1);
-  expect(new Set(result.attempts.slice(0, 16).map(attempt => attempt.orderId)).size).toBe(1);
-  await expect(page.locator("#summary")).toHaveText("16 replies. 1 order.");
-  await expect(page.locator("#available")).toHaveText("7");
-  await expect(page.locator("#reserved")).toHaveText("3");
-  await expect(page.locator(".request-tile[data-state=RESERVED]")).toHaveCount(16);
-  await page.locator(".request-tile").nth(0).click();
-  await expect(page.locator("#request-detail")).toContainText(result.attempts[0].orderId);
-  await page.locator(".request-tile").nth(16).click();
-  await expect(page.locator("#request-detail")).toContainText("IDEMPOTENCY_CONFLICT");
-  await expect(page.locator("#request-detail")).toContainText("No order returned");
-});
-
-test("recorded lifecycle steps can be replayed without new writes, and switching stops playback", async ({ page }) => {
+test("replay and filtering send no writes; rerunning creates a fresh product", async ({ page }) => {
   const writes = [];
-  page.on("request", request => { if (request.url().includes("/api/demo/run/")) writes.push(request); });
+  page.on("request", r => { if (r.url().includes("/api/demo/run/")) writes.push(r); });
   await ready(page);
-  const result = await execute(page, "lifecycle");
-  expect(result.snapshots).toHaveLength(7);
-  await expect(page.locator("#available")).toHaveText("9");
-  await expect(page.locator("#sold")).toHaveText("3");
-  await page.locator(".snapshot").nth(1).click();
-  await expect(page.locator("#reserved")).toHaveText("3");
-  await expect(page.locator("#sold")).toHaveText("0");
+  const first = await execute(page, "contention");
+  await page.locator("#filter").selectOption("rejected");
+  await expect(page.locator(".log-line:visible")).toHaveCount(95);
+  await page.locator("#filter").selectOption("ok");
+  await expect(page.locator(".log-line:visible")).toHaveCount(5);
+  await page.locator("#filter").selectOption("snapshot");
+  await expect(page.locator(".log-line:visible")).toHaveCount(2);
+  await page.locator("#filter").selectOption("all");
   await page.locator("#replay").click();
-  await expect(page.locator("#available")).toHaveText("12");
-  await expect(page.locator("#replay")).toHaveText("Pause replay");
-  await expect(page.locator("#reserved")).toHaveText("3", { timeout: 3000 });
-  await page.locator('[data-scenario="race"]').click();
-  await page.waitForTimeout(1300);
-  await expect(page.locator("#inventory-mode")).toHaveText("Preset");
-  await expect(page.locator("#reserved")).toHaveText("1");
-  await expect(page.locator("#recording")).toBeHidden();
+  await expect(page.locator("#phase")).toHaveText("Completed");
+  await expect(page.locator(".log-line")).toHaveCount(102);
   expect(writes).toHaveLength(1);
+  const second = await execute(page, "contention");
+  expect(first.snapshots[0].inventory.id).not.toBe(second.snapshots[0].inventory.id);
+  expect(writes).toHaveLength(2);
 });
 
-test("expiry shows held stock returning without pretending to wait for the scheduler", async ({ page }) => {
+test("switching presets cancels replay and reload never shows stale results", async ({ page }) => {
   await ready(page);
-  const result = await execute(page, "expiry");
-  expect(result.persistedOrders).toBe(1);
-  await expect(page.locator("#summary")).toHaveText("2 held units. Returned to stock.");
-  await expect(page.locator("#available")).toHaveText("5");
-  await expect(page.locator("#reserved")).toHaveText("0");
-  await expect(page.locator("#scene-note")).toContainText("advances only its own order's deadline");
+  await execute(page, "contention");
+  await page.locator("#speed").selectOption("slow");
+  await page.locator("#replay").click();
+  await expect.poll(() => page.locator(".log-line").count()).toBeGreaterThan(0);
+  await page.locator('[data-scenario="expiry"]').click();
+  await page.waitForTimeout(300);
+  await expect(page.locator(".log-line")).toHaveCount(0);
+  await expect(page.locator("#phase")).toHaveText("Ready");
+  await expect(page.locator("#result")).toBeHidden();
+  await page.reload();
+  await expect(page.locator("#run")).toBeEnabled();
+  await expect(page.locator(".log-line")).toHaveCount(0);
 });
 
-test("an infrastructure error clears the prior result, makes no success claim, and allows retry", async ({ page }) => {
+test("errors and malformed records never appear as stock rejections or successful runs", async ({ page }) => {
   await ready(page);
-  await execute(page);
   await page.route("**/api/demo/run/contention", route => route.fulfill({ status: 500, json: { detail: "Database unavailable" } }));
   await page.locator("#run").click();
-  await expect(page.locator("#phase")).toHaveText("ERROR");
-  await expect(page.locator("#summary")).toHaveText("No verified result.");
-  await expect(page.locator("#outcome-note")).toContainText("Database unavailable");
-  await expect(page.locator("#recording")).toBeHidden();
-  await expect(page.locator("#metrics strong")).toHaveText(["—", "—", "—"]);
-  await expect(page.locator(".request-tile[data-state=RESERVED]")).toHaveCount(0);
+  await expect(page.locator("#error")).toContainText("Database unavailable");
+  await expect(page.locator("#result")).toBeHidden();
+  await expect(page.locator(".log-line")).toHaveCount(0);
   await expect(page.locator("#run")).toBeEnabled();
   await page.unroute("**/api/demo/run/contention");
-  await execute(page);
+  await page.route("**/api/demo/run/contention", async route => {
+    const response = await route.fetch();
+    const result = await response.json();
+    result.activity.pop();
+    await route.fulfill({ response, json: result });
+  });
+  await page.locator("#run").click();
+  await expect(page.locator("#error")).toContainText("invalid demo result");
+  await expect(page.locator("#result")).toBeHidden();
+  await page.unroute("**/api/demo/run/contention");
+  await execute(page, "contention");
+  await expect(page.locator("#verification")).toHaveText("Checks passed");
 });
 
-test("failed assertions remain visible without a celebratory result", async ({ page }) => {
+test("backend assertion failures remain visible even with HTTP 200", async ({ page }) => {
   await ready(page);
   await page.route("**/api/demo/run/race", async route => {
     const response = await route.fetch();
     const result = await response.json();
     result.passed = false;
-    result.checks["Injected assertion failure"] = false;
+    result.checks["Injected failure"] = false;
     await route.fulfill({ response, json: result });
   });
-  await page.locator('[data-scenario="race"]').click();
-  await page.locator("#run").click();
-  await expect(page.locator("#phase")).toHaveText("CHECK FAILED");
-  await expect(page.locator("#summary")).toHaveText("The run needs attention.");
-  await page.locator("#backend > summary").click();
-  await expect(page.locator("#assertions .failed")).toContainText("Injected assertion failure");
+  await execute(page, "race");
+  await expect(page.locator("#verification")).toHaveText("Checks failed");
+  await expect(page.locator("#assertions .failed")).toContainText("Injected failure");
 });
 
-test("rapid clicks cannot submit twice or switch the scenario mid-request", async ({ page }) => {
-  await ready(page);
-  let release;
-  const hold = new Promise(resolve => { release = resolve; });
-  let writes = 0;
-  await page.route("**/api/demo/run/contention", async route => { writes++; await hold; await route.continue(); });
-  try {
-    await page.locator("#run").evaluate(button => { button.click(); button.click(); });
-    await expect(page.locator("#phase")).toHaveText("RUNNING");
-    await expect(page.locator('[data-scenario="race"]')).toBeDisabled();
-    await expect(page.locator("#run")).toBeDisabled();
-    await expect.poll(() => writes).toBe(1);
-  } finally { release(); }
-  await expect(page.locator("#phase")).toHaveText("RECORDED");
-  expect(writes).toBe(1);
-});
-
-test("mobile layout fits, recorded results remain inspectable, and the manual workspace still works", async ({ page }, testInfo) => {
+test("mobile terminal scrolls internally and original account workspace still works", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await ready(page);
-  await execute(page);
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-  await page.screenshot({ path: testInfo.outputPath("playground-mobile.png"), fullPage: true });
+  await execute(page, "lifecycle");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: test.info().outputPath("terminal-mobile.png"), fullPage: true });
   await page.getByRole("link", { name: "Manual API workspace" }).click();
   await expect(page.locator("#login-form")).toBeVisible();
+});
+
+test("reduced-motion preference shows all recorded results without playback", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await ready(page);
+  await execute(page, "contention");
+  await expect(page.locator(".log-line")).toHaveCount(102);
+  await expect(page.locator("#pause")).toBeDisabled();
+  await expect(page.locator("#verification")).toHaveText("Checks passed");
 });

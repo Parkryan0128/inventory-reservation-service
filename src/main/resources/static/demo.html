@@ -3,71 +3,60 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="description" content="One product. Competing customers. See real inventory transactions without signing in." />
-  <title>Inventory Playground</title>
+  <meta name="description" content="Backend inventory dashboard: run reservation scenarios and inspect recorded service activity." />
+  <title>Inventory Reservation System</title>
   <link rel="stylesheet" href="/demo.css" />
   <script type="module" src="/demo.js"></script>
 </head>
 <body>
-  <header class="topbar">
-    <a class="brand" href="/">inventory<span class="brand-mark">/</span><span>playground</span></a>
-    <span id="connection" class="connection" role="status">Connecting to backend…</span>
-  </header>
   <main>
-    <section class="intro">
-      <p class="eyebrow">A BACKEND YOU CAN SEE</p>
-      <h1 id="headline">5 graphics cards.<br />100 customers.</h1>
-      <p id="description" class="lede">Everyone wants the last few. Can the system reserve exactly five, without promising the same unit twice?</p>
-    </section>
-    <nav class="presets" aria-label="Shopping scenarios">
-      <div class="primary-presets">
-        <button type="button" data-scenario="contention" aria-pressed="true"><span>01</span> Flash sale</button>
-        <button type="button" data-scenario="race" aria-pressed="false"><span>02</span> Payment vs cancel</button>
-        <button type="button" data-scenario="idempotency" aria-pressed="false"><span>03</span> Duplicate request</button>
+    <header class="page-header">
+      <div><h1>Inventory Reservation System</h1><p>Backend dashboard <span aria-hidden="true">/</span> Spring Boot · PostgreSQL · Redis</p></div>
+      <span id="connection" role="status">Connecting…</span>
+    </header>
+    <section class="product panel" aria-label="Product and inventory">
+      <div class="product-art" aria-hidden="true"><div class="gpu"><div class="fan"></div><div class="fan"></div><span>VECTOR / 01</span><div class="contacts"></div></div></div>
+      <div class="product-name"><h2>Vector One</h2><p>Graphics card · CA$899.00</p><small>Fictional product · isolated test data</small></div>
+      <div class="inventory">
+        <div class="stock"><div><span>Available</span><strong id="available">5</strong></div><div><span>Reserved</span><strong id="reserved">0</strong></div><div><span>Sold</span><strong id="sold">0</strong></div></div>
+        <p id="stock-caption">Preset preview · no database changes yet.</p>
       </div>
-      <div class="secondary-presets"><span>Also try</span><button type="button" data-scenario="lifecycle" aria-pressed="false">Checkout & returns</button><button type="button" data-scenario="expiry" aria-pressed="false">Abandoned checkout</button></div>
+    </section>
+    <nav class="tabs" aria-label="Scenarios">
+      <button type="button" data-scenario="contention" aria-pressed="true">Concurrent reservations</button>
+      <button type="button" data-scenario="idempotency" aria-pressed="false">Duplicate requests</button>
+      <button type="button" data-scenario="race" aria-pressed="false">Payment vs cancel</button>
+      <button type="button" data-scenario="lifecycle" aria-pressed="false">Order lifecycle</button>
+      <button type="button" data-scenario="expiry" aria-pressed="false">Reservation expiry</button>
     </nav>
-    <section class="workspace" aria-label="Reservation playground">
-      <aside class="product-panel">
-        <div class="product-heading"><p class="eyebrow">LIMITED DROP</p><span class="tag">Fictional product</span></div>
-        <div class="product-art" aria-hidden="true"><div class="gpu"><div class="fan"></div><div class="fan"></div><div class="gpu-label">VECTOR / 01</div><div class="contacts"></div></div></div>
-        <div class="product-title"><div><h2>Vector One</h2><p>Graphics card · Founder's edition</p></div><strong id="price">CA$899</strong></div>
-        <div class="inventory-heading"><h3>Where is the stock?</h3><span id="inventory-mode" class="tag">Preset</span></div>
-        <div class="stock-lanes">
-          <section class="stock-lane available"><h4>Available</h4><strong id="available">5</strong><p>Ready to reserve</p><div id="units-available" class="units" aria-hidden="true"></div></section>
-          <section class="stock-lane reserved"><h4>Reserved</h4><strong id="reserved">0</strong><p>Held for payment</p><div id="units-reserved" class="units" aria-hidden="true"></div></section>
-          <section class="stock-lane sold"><h4>Sold</h4><strong id="sold">0</strong><p>Payment complete</p><div id="units-sold" class="units" aria-hidden="true"></div></section>
-        </div>
-        <p id="stock-equation" class="stock-equation">5 available + 0 reserved + 0 sold = 5 units</p>
-        <p id="stock-caption" class="muted">Preset preview. No database changes yet.</p>
-      </aside>
-      <div class="scenario-panel">
-        <div class="scene-heading"><h2 id="scene-title">The rush for the last five</h2><span id="phase" class="tag">READY</span></div>
-        <p id="scene-note" class="muted"></p>
-        <div id="visual" class="visual"></div>
-        <p id="request-detail" class="request-detail">Each square will show one customer's actual reservation result.</p>
-        <div class="run-bar"><button type="button" id="run" class="run-button" disabled>Send 100 customers <span aria-hidden="true">↗</span></button><p id="run-hint">100 calls · 16 server workers · 1 unit each</p></div>
-        <div id="outcome" class="outcome" role="status" aria-live="polite" aria-atomic="true"><h3 id="summary">Who gets a reservation?</h3><p id="outcome-note">Run the scenario to find out. Reservations are not completed sales.</p></div>
-        <div id="metrics" class="metrics"></div>
-      </div>
+    <section class="scenario panel" aria-labelledby="scenario-title">
+      <div class="section-heading"><h2 id="scenario-title">Concurrent reservations</h2><span id="phase" role="status">Ready</span></div>
+      <p id="description"></p>
+      <dl id="configuration" class="configuration"></dl>
+      <div class="explanation"><div><h3>What this tests</h3><p id="mechanism"></p></div><div><h3>Expected result</h3><p id="expected"></p></div></div>
+      <div class="run-bar"><button type="button" id="run" class="primary" disabled>Run scenario</button><span>Fresh product each run. No login or manual setup.</span></div>
     </section>
-    <section id="recording" class="recording" hidden aria-label="Recorded inventory changes">
-      <div class="recording-heading"><div><p class="eyebrow">FOLLOW THE STOCK</p><h2>Step through what actually happened.</h2></div><button type="button" id="replay" class="secondary-button">Replay stock changes</button></div>
-      <div id="snapshots" class="snapshots" aria-label="Database snapshots"></div>
-      <p class="muted">These are recorded database snapshots from this run, not a live stock feed. Replay only changes the view; it sends no new requests.</p>
-    </section>
-    <details class="backend" id="backend">
-      <summary>Under the hood <span>Transactions, assertions & raw response</span></summary>
-      <div class="backend-content">
-        <div class="architecture"><div><strong>Browser</strong><span>Starts one scenario</span></div><b aria-hidden="true">→</b><div><strong>Spring Boot</strong><span>Real transactional services</span></div><b aria-hidden="true">→</b><div><strong id="database-name">Database</strong><span>Row locks + atomic updates</span></div></div>
-        <p id="technical-note">The server runs the same reservation services as the normal API. Concurrency is generated by server workers, not by opening 100 browser connections.</p>
-        <p id="record-metadata" class="muted">No execution recorded yet.</p>
-        <ul id="assertions" class="assertions"></ul>
-        <details><summary>Raw response for this run</summary><pre id="raw">No response yet.</pre></details>
-        <p id="events" class="muted">Kafka is optional and is not part of the visual scenario.</p>
+    <section class="terminal" aria-labelledby="activity-title">
+      <div class="terminal-header"><h2 id="activity-title">Backend activity</h2><span id="playback-state" role="status">No recording</span></div>
+      <div class="terminal-controls">
+        <button type="button" id="pause" disabled>Pause</button><button type="button" id="skip" disabled>Show all</button><button type="button" id="replay" disabled>Replay</button>
+        <label>Speed <select id="speed"><option value="normal">Normal</option><option value="fast">Fast</option><option value="slow">Slow</option></select></label>
+        <label>Filter <select id="filter"><option value="all">All entries</option><option value="ok">Successful calls</option><option value="rejected">Rejected calls</option><option value="snapshot">Inventory snapshots</option></select></label>
+        <label class="follow"><input type="checkbox" id="follow" checked /> Follow log</label>
       </div>
-    </details>
-    <footer><span>Real backend. Simulated payments. No sign-in.</span><a href="/index.html">Manual API workspace</a><p>Local demo only. Every run creates fresh test data; existing products and orders are left alone.</p></footer>
+      <div id="log" class="log" tabindex="0" role="region" aria-label="Recorded backend activity" aria-describedby="log-note"><p id="log-placeholder">Run a scenario to record backend activity.</p><div id="log-lines"></div></div>
+      <div class="terminal-footer"><span id="log-progress" role="status">0 entries</span><span id="log-counts">0 successful · 0 rejected</span></div>
+    </section>
+    <p id="log-note" class="log-note">Server-recorded service results, replayed for readability. Not a live HTTP or SQL trace. Timestamps are UTC; playback speed does not change server execution.</p>
+    <section id="result" class="panel results" hidden aria-labelledby="result-title">
+      <div class="section-heading"><h2 id="result-title">Result</h2><span id="verification" role="status"></span></div>
+      <dl id="metrics" class="metrics"></dl>
+      <div class="result-detail"><div><h3>Recorded inventory</h3><table><thead><tr><th scope="col">State</th><th scope="col">Before</th><th scope="col">After</th></tr></thead><tbody id="stock-table"></tbody></table></div><div><h3>Checks</h3><ul id="assertions"></ul></div></div>
+      <p id="record-metadata" class="metadata"></p>
+    </section>
+    <p id="error" class="error" role="alert" hidden></p>
+    <details class="panel technical"><summary>Technical details</summary><div class="technical-content"><p id="technical-note">One browser request starts a scenario. Server workers call the same transactional services used by the normal API.</p><p id="events"></p><details><summary>Raw response</summary><pre id="raw">No response yet.</pre></details></div></details>
+    <footer><span>Local demo · simulated payments · generated data remains in the database</span><a href="/index.html">Manual API workspace</a></footer>
   </main>
 </body>
 </html>
