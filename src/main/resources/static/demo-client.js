@@ -214,3 +214,81 @@ export class DemoClient {
     } finally { this.running = false; }
   }
 }
+
+const manualActions = ["ADD_STOCK", "REMOVE_STOCK", "BUY", "PAY", "CANCEL"];
+const orderStatuses = ["RESERVED", "CONFIRMED", "CANCELLED", "PAYMENT_FAILED", "EXPIRED"];
+const manualInvalid = () => { throw new Error("The server returned an invalid manual result. Refresh the item before continuing."); };
+function validInventory(p, id) {
+  return object(p) && typeof p.id === "string" && p.id.length > 0 && (!id || p.id === id) &&
+    [p.available, p.reserved, p.sold, p.initialStock].every(count) &&
+    p.available + p.reserved + p.sold === p.initialStock;
+}
+function validOrder(order, productId) {
+  return order === null || object(order) && typeof order.id === "string" && order.id.length > 0 &&
+    order.productId === productId && count(order.quantity) && order.quantity > 0 &&
+    orderStatuses.includes(order.status) && date(order.expiresAt);
+}
+export function validateManualState(state) {
+  if (!object(state) || !validInventory(state.inventory) || !validOrder(state.order, state.inventory.id) ||
+      !date(state.observedAt) || !Array.isArray(state.activity) || !state.activity.length || state.activity.length > 200 ||
+      !object(state.activity[0])) manualInvalid();
+  let previous = state.activity[0].sequence - 1;
+  for (const e of state.activity) {
+    if (!object(e) || !count(e.sequence) || e.sequence < 1 || e.sequence !== ++previous || !date(e.recordedAt) ||
+        ![e.operation, e.code, e.message].every(v => typeof v === "string" && v.length) ||
+        !["ok", "rejected", "info"].includes(e.level) || !count(e.quantity) || !count(e.durationMs) ||
+        !validInventory(e.inventory, state.inventory.id) || !validOrder(e.order, state.inventory.id)) manualInvalid();
+  }
+  const last = state.activity.at(-1);
+  if (["available", "reserved", "sold", "initialStock"].some(k => last.inventory[k] !== state.inventory[k]) ||
+      last.order?.id !== state.order?.id || last.order?.status !== state.order?.status) manualInvalid();
+  return state;
+}
+
+export class ManualClient {
+  constructor(fetcher = globalThis.fetch.bind(globalThis)) {
+    this.fetcher = fetcher;
+    this.csrfClient = new DemoClient(fetcher);
+    this.running = false;
+    this.productId = null;
+  }
+  async request(path, options = {}, allowRejection = false) {
+    const response = await this.fetcher(path, { credentials: "same-origin", cache: "no-store", signal: AbortSignal.timeout(30000), ...options });
+    let body;
+    try { body = await response.json(); }
+    catch { throw new Error(`The server returned an unreadable response (HTTP ${response.status}).`); }
+    if (!response.ok && !(allowRejection && [400, 409].includes(response.status) && Array.isArray(body?.activity))) {
+      throw new Error(body?.detail || `Manual request failed (HTTP ${response.status}).`);
+    }
+    const state = validateManualState(body);
+    if (this.productId && state.inventory.id !== this.productId) {
+      throw new Error("The demo session changed. Reload the page to open the current item.");
+    }
+    if (!response.ok && state.activity.at(-1).level !== "rejected") manualInvalid();
+    this.productId = state.inventory.id;
+    return state;
+  }
+  state() { return this.request("/api/demo/manual"); }
+  open() { return this.write("/api/demo/manual"); }
+  act(action, quantity = 1) {
+    if (!manualActions.includes(action) || !Number.isSafeInteger(quantity) || quantity < 1 || quantity > 10000) {
+      return Promise.reject(new Error("Choose an action and a whole quantity between 1 and 10000."));
+    }
+    return this.write("/api/demo/manual/actions", { action, quantity });
+  }
+  async write(path, payload) {
+    if (this.running) throw new Error("A manual request is already running.");
+    this.running = true;
+    try {
+      const csrf = await this.csrfClient.request("/api/csrf");
+      if (!csrf || typeof csrf.headerName !== "string" || !csrf.headerName || typeof csrf.token !== "string" || !csrf.token) {
+        throw new Error("Unable to obtain a CSRF token. Refresh the page.");
+      }
+      return await this.request(path, {
+        method: "POST",
+        headers: { [csrf.headerName]: csrf.token, "Content-Type": "application/json" },
+        ...(payload ? { body: JSON.stringify(payload) } : {}),
+      }, Boolean(payload));
+    } finally { this.running = false; }
+  }
+}

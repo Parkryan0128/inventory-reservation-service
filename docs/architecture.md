@@ -12,6 +12,8 @@ flowchart TD
 
 A product keeps `available`, `reserved`, `sold` and `initial_stock`. The database enforces nonnegative counters and `available + reserved + sold = initial_stock`. A reservation locks the product row, checks availability, moves available units into reserved units and inserts the order plus outbox event in one transaction. Integer cents avoid floating-point money calculations; each order snapshots the database price.
 
+For manual stock adjustments, the legacy `initial_stock` / `initialStock` field serves as the current stock balance baseline: adding or removing units updates it and `available` by the same amount in a transaction. It is not an immutable receipt of the product's creation quantity. Reserved and sold units remain unchanged. Adjustments and reservations take the same product write lock; insufficient available units or an excessive stock total reject the transaction. No arbitrary stock-adjustment endpoint is exposed on the normal customer API.
+
 Pessimistic locking gives a straightforward correctness argument for a scarce product. It serializes requests for that product and limits throughput under contention. An atomic conditional update (`available >= quantity`) or optimistic locking with bounded retries would be sensible alternatives; neither removes the hot-product bottleneck. The Compose JDBC connection sets a five-second lock timeout. Lock contention maps to a retryable API error; callers should keep the same idempotency key.
 
 ## Idempotency race

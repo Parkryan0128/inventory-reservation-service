@@ -22,6 +22,18 @@ Each scenario explains the situation and how the backend handles it. The scenari
 
 ## Reading the terminal
 
+### Manual mode
+
+The **Manual** tab creates one five-unit product and generated owner per HTTP session. Opening it again resumes that item; scenario presets continue to create separate products. The product ID and current order ID remain visible in the sidebar. Session expiry or a server restart ends this association; generated database rows are not deleted.
+
+Use **Add stock** and **Remove stock** with a whole quantity from 1 to 10000. Both operations lock the product row, sharing the reservation lock. Removal affects only available units and cannot consume reserved or sold stock. The total stock baseline is capped at 1000000 units. **Buy** uses the real reservation service. Finish the current reserved order with **Confirm payment** or **Cancel**, or let its normal deadline expire, before buying again. Payment and cancellation use the existing order transition and outbox transaction.
+
+Manual actions return their committed database snapshot and server-recorded outcome, including domain rejections. The browser updates counters only after receiving that response and never replays or automatically retries a stock mutation. A transport error leaves the last known snapshot marked as such. **Reconnect** reads or resumes the current item; it does not repeat the failed action. Each session retains the last 200 activity entries in memory. Reads poll every four seconds while Manual mode is selected, so automatic expiry or changes from another tab appear as observed database snapshots. This is request/response plus polling, not a live event stream.
+
+Manual routes exist only under the local demo profile, retain CSRF protection and accept actions and quantities rather than arbitrary product, order or owner IDs. Other sessions cannot target the manual item through these routes. GET reads do not create items or perform stock transitions.
+
+### Scenario playback
+
 Each log entry is recorded on the server. Concurrent workers append their results after the real Spring-proxied transactional service returns. Entries include a monotonically increasing sequence, UTC observation timestamp, request ID, actor label, operation, returned status, measured service-call duration, quantity, idempotency key and returned order ID. Hover over a row to inspect the full order ID.
 
 The server returns the completed recording; the browser reveals it progressively. **Replaying recorded results** identifies this presentation phase. It is not a live WebSocket/SSE stream, HTTP access log, SQL trace, lock-wait profiler or reconstructed database commit order. Service calls are not labelled with invented HTTP 201/409 statuses. A worker can be descheduled between commit and recording, so a rejection can appear before an earlier successful transaction's result. Successes are never sorted to the top.
@@ -40,7 +52,7 @@ Results are historical. The normal scheduler may subsequently expire unpaid rese
 
 The concurrency workload is 100 service calls on 16 workers, not 100 simultaneous HTTP connections. Database concurrency is also bounded by the connection pool. Use `scripts/contention.py` for separate end-to-end HTTP measurements. The expiry fixture moves only its generated order's deadline into the past and invokes the real expiry service; it does not change the application clock or claim to test scheduler timing.
 
-The demo API exists only under the `demo` profile. It keeps CSRF protection, checks the loopback hostname, limits runs to fixed scenarios, and allows one scenario at a time. Compose binds to `127.0.0.1`. Keep this intentionally unauthenticated profile local; the hostname guard is not public-deployment authentication. Normal product, order and admin APIs retain their authentication, role and ownership checks.
+The demo API exists only under the `demo` profile. It keeps CSRF protection and checks the loopback hostname. Scenario runs are limited to fixed presets and allow one run at a time; manual actions are serialized per session and operate only on that session's generated item. Compose binds to `127.0.0.1`. Keep this intentionally unauthenticated profile local; the hostname guard is not public-deployment authentication. Normal product, order and admin APIs retain their authentication, role and ownership checks.
 
 Redis caches metadata, not live inventory. Optional Kafka/outbox counts are application-wide observations rather than per-scenario assertions. Enable Kafka with:
 
@@ -58,3 +70,5 @@ npm run test:browser
 ```
 
 Java tests check real outcomes and persisted rows against H2 and PostgreSQL, including the activity sequence, order IDs, repeated transitions and expiry no-ops. JavaScript tests cover response validation, stock derivation, duplicate-order handling, paused/resumed playback, speed changes, stale callback cancellation and errors. Browser tests run real scenarios against Compose. Separate deterministic UI tests use fixture responses and a controlled browser clock to check all speed settings, mid-replay speed changes, pause/resume, follow preferences, and removal of unused UI sections. Browser coverage also includes filtering, replay without writes, fresh reruns, errors, mobile layout, reduced-motion behavior and the original workspace.
+
+Manual coverage includes remove-to-zero/reject/restock/purchase journeys, cancellation, session isolation, CSRF, expiry observation, concurrent reservation versus stock removal, adjustment rollback and bounds, client duplicate-click protection and no automatic write retries. Browser tests cover mode switches, reload persistence, immediate responses, waiting for server counters and mobile layout.

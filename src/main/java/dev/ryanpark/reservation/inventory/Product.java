@@ -61,6 +61,18 @@ public class Product {
     sold += quantity;
   }
 
+  public void adjustStock(int delta) {
+    if (delta == 0 || delta < -10_000 || delta > 10_000)
+      throw ApiException.invalid("Stock adjustment must be between 1 and 10000 units");
+    if (delta < 0 && available < -delta)
+      throw ApiException.conflict("INSUFFICIENT_STOCK", "Only available stock can be removed");
+    if ((long) initialStock + delta > 1_000_000)
+      throw ApiException.conflict("STOCK_LIMIT", "Total stock cannot exceed 1000000 units");
+    available += delta;
+    // The existing balance column is the stock baseline, including subsequent adjustments.
+    initialStock += delta;
+  }
+
   private void checkReserved(int quantity) {
     if (quantity < 1 || reserved < quantity)
       throw new IllegalStateException("Invalid inventory transition");

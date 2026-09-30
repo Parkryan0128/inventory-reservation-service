@@ -7,6 +7,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import dev.ryanpark.reservation.demo.DemoController;
 import dev.ryanpark.reservation.demo.DemoService;
+import dev.ryanpark.reservation.demo.ManualDemoController;
+import dev.ryanpark.reservation.demo.ManualDemoService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -26,6 +28,12 @@ class DemoDisabledTest {
   void demoDoesNotExistOutsideDemoProfileEvenForAdmin() throws Exception {
     assertThat(context.getBeansOfType(DemoController.class)).isEmpty();
     assertThat(context.getBeansOfType(DemoService.class)).isEmpty();
+    assertThat(context.getBeansOfType(ManualDemoController.class)).isEmpty();
+    assertThat(context.getBeansOfType(ManualDemoService.class)).isEmpty();
+    mvc.perform(get("/api/demo/manual")).andExpect(status().isUnauthorized());
+    mvc.perform(
+            post("/api/demo/manual").with(user("admin").roles("ADMIN", "CUSTOMER")).with(csrf()))
+        .andExpect(status().isNotFound());
     mvc.perform(get("/api/demo/status")).andExpect(status().isUnauthorized());
     mvc.perform(
             post("/api/demo/run/race").with(user("admin").roles("ADMIN", "CUSTOMER")).with(csrf()))

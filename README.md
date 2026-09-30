@@ -46,6 +46,8 @@ docker compose up --build -d
 
 Open [127.0.0.1:8080](http://127.0.0.1:8080/) and click **Run scenario**. The page explains the three-step purchase and reservation flow, then shows each scenario's setup and backend behavior beside the Backend activity terminal. The terminal shows inventory counters at the top and recorded results at the bottom. No login or manual product setup is needed.
 
+Choose **Manual** to keep one demo item in the browser session. Add or remove available stock, buy a quantity, then confirm payment or cancel the resulting order. For example, remove all 5 units, try a purchase to see the rejection, add 2 units and buy again. Counters use database snapshots returned by the server; each action appears immediately after its response, without playback. Switching modes or reloading the page keeps the same manual item while the session exists.
+
 The default scenario submits 100 reservation service calls through 16 server workers for five units. It expects five reservations and 95 insufficient-stock rejections. Other presets cover duplicate requests, payment versus cancellation, the order lifecycle, and expiry.
 
 The server records each completed service call. The browser replays those records progressively, with pause/resume, speed, filtering and replay controls. Log order is server observation order, not a reconstructed commit order. This is not a live HTTP/SQL log or a benchmark of 100 simultaneous browser connections. During reservation playback, derived inventory counts are explicitly labelled and reconciled with the recorded database snapshots. The expiry fixture advances only its generated order's deadline to avoid waiting two minutes.

@@ -1,4 +1,4 @@
-import { DemoClient, Replay, entryLevel, inventoryAt, summarize } from "./demo-client.js";
+import { DemoClient, ManualClient, Replay, entryLevel, inventoryAt, summarize } from "./demo-client.js";
 
 const presets = {
   contention: {
@@ -29,6 +29,12 @@ const presets = {
 };
 const $ = id => document.getElementById(id);
 const client = new DemoClient();
+const manualClient = new ManualClient();
+let mode = "scenarios";
+let manualState = null;
+let manualBusy = false;
+let manualAvailable = false;
+let manualEpoch = 0;
 let selected = "contention";
 let result = null;
 let busy = false;
@@ -62,6 +68,17 @@ function controls() {
   $("skip").disabled = !activePlayback || busy;
   $("replay").hidden = !complete;
   $("replay").disabled = !complete || busy;
+  $("speed-control").hidden = mode === "manual";
+  document.querySelectorAll("[data-mode]").forEach(b => { b.disabled = busy || manualBusy; });
+  const reserved = manualState?.order?.status === "RESERVED";
+  document.querySelectorAll("[data-action]").forEach(b => {
+    const action = b.dataset.action;
+    b.disabled = manualBusy || !manualAvailable || !manualState ||
+      (action === "BUY" && reserved) || (["PAY", "CANCEL"].includes(action) && !reserved);
+  });
+  $("stock-quantity").disabled = manualBusy;
+  $("buy-quantity").disabled = manualBusy;
+  $("manual-connect").hidden = manualAvailable || manualBusy;
 }
 function clearLog() {
   shown = [];
@@ -73,7 +90,7 @@ function clearLog() {
   $("log-counts").textContent = "0 successful · 0 rejected";
 }
 function choose(name) {
-  if (busy) return;
+  if (busy || mode !== "scenarios") return;
   replay.stop();
   result = null;
   selected = name;
@@ -92,6 +109,7 @@ function choose(name) {
 }
 function matches(e) {
   const filter = $("filter").value;
+  if (mode === "manual") return filter === "all" || filter === "snapshot" && e.code === "SNAPSHOT" || filter === e.level;
   return filter === "all" || filter === "snapshot" && e.snapshotIndex !== null || filter === entryLevel(e);
 }
 function appendEntry(e) {
@@ -157,7 +175,7 @@ function startReplay() {
   replay.play();
 }
 async function run() {
-  if (busy || !connected || serverBusy || replay.state === "playing") return;
+  if (mode !== "scenarios" || busy || !connected || serverBusy || replay.state === "playing") return;
   choose(selected);
   busy = true;
   controls();
@@ -192,6 +210,140 @@ async function refreshStatus() {
   }
   controls();
 }
+
+async function changeMode(next) {
+  if (busy || manualBusy || next === mode) return;
+  mode = next;
+  manualEpoch++;
+  replay.stop();
+  result = null;
+  clearLog();
+  $("result").hidden = true;
+  $("error").hidden = true;
+  $("filter").value = "all";
+  $("scenarios-panel").hidden = mode !== "scenarios";
+  $("manual-panel").hidden = mode !== "manual";
+  document.querySelectorAll("[data-mode]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.mode === mode)));
+  if (mode === "scenarios") choose(selected);
+  else {
+    inventory({ available: "—", reserved: "—", sold: "—" }, "Waiting for server");
+    $("log-placeholder").textContent = "Opening the demo item…";
+    await openManual();
+  }
+  controls();
+}
+
+function renderManual(state) {
+  if (manualState && state.activity.at(-1).sequence < manualState.activity.at(-1).sequence) return;
+  manualState = state;
+  manualAvailable = true;
+  inventory(state.inventory, `Database snapshot · ${new Date(state.observedAt).toLocaleTimeString()}`);
+  $("manual-product").textContent = `Product ${state.inventory.id}`;
+  $("manual-order").hidden = !state.order;
+  if (state.order) {
+    $("manual-order-status").textContent = state.order.status;
+    $("manual-order-id").textContent = `Order ${state.order.id}`;
+    $("manual-order-detail").textContent = `${state.order.quantity} unit(s)` +
+      (state.order.status === "RESERVED" ? ` · Hold ends at ${new Date(state.order.expiresAt).toLocaleTimeString()}` : "");
+    $("manual-order-actions").hidden = state.order.status !== "RESERVED";
+  }
+  const last = state.activity.at(-1);
+  if ($("log-lines").lastElementChild?.dataset.sequence !== String(last.sequence)) {
+    const position = $("log").scrollTop;
+    shown = state.activity;
+    $("log-lines").replaceChildren(...state.activity.map(e => {
+      const row = element("div", undefined, "log-line");
+      row.dataset.sequence = e.sequence;
+      row.dataset.code = e.code;
+      row.dataset.level = e.level;
+      row.hidden = !matches(e);
+      const time = new Date(e.recordedAt).toISOString().slice(11, 23);
+      const label = { ok: "OK", rejected: "REJECT", info: "INFO" }[e.level];
+      row.append(element("span", `${String(e.sequence).padStart(3, "0")} `, "log-sequence"),
+        element("span", `${time} `, "log-time"), element("span", `${label.padEnd(6)} `, "log-level"),
+        element("span", `${e.operation.padEnd(15)} `), element("span", e.code.padEnd(22), "log-code"));
+      const p = e.inventory;
+      const detail = `${e.durationMs}ms${e.quantity ? ` qty=${e.quantity}` : ""} available=${p.available} reserved=${p.reserved} sold=${p.sold}` +
+        (e.order ? ` order=${e.order.id.slice(0, 8)} state=${e.order.status}` : "") +
+        (e.level === "rejected" ? ` · ${e.message}` : "");
+      row.append(element("span", ` ${detail}`, "log-data"));
+      row.title = e.order ? `Order ${e.order.id}` : `Product ${p.id}`;
+      return row;
+    }));
+    $("log").scrollTop = $("follow").checked ? $("log").scrollHeight : position;
+  }
+  $("log-placeholder").hidden = true;
+  $("log-progress").textContent = `${state.activity.length} server entries`;
+  $("log-counts").textContent = `${state.activity.filter(e => e.level === "ok").length} successful · ${state.activity.filter(e => e.level === "rejected").length} rejected`;
+  $("playback-state").textContent = "Ready · server responses";
+  controls();
+}
+
+function manualError(error) {
+  manualAvailable = false;
+  $("playback-state").textContent = "Server unavailable";
+  $("stock-caption").textContent = manualState ? "Last known database snapshot" : "No database snapshot";
+  $("error").textContent = `${error.message} The request was not retried. Reconnect to check the current state before continuing.`;
+  $("error").hidden = false;
+  controls();
+}
+
+async function openManual() {
+  if (manualBusy) return;
+  manualBusy = true;
+  manualEpoch++;
+  controls();
+  $("playback-state").textContent = "Opening demo item";
+  try {
+    renderManual(await manualClient.open());
+    $("error").hidden = true;
+  } catch (error) { manualError(error); }
+  finally { manualBusy = false; controls(); }
+}
+
+async function manualAction(action, quantity) {
+  if (mode !== "manual" || manualBusy || !manualAvailable) return;
+  manualBusy = true;
+  manualEpoch++;
+  controls();
+  $("error").hidden = true;
+  $("playback-state").textContent = "Waiting for server";
+  try {
+    const state = await manualClient.act(action, quantity);
+    renderManual(state);
+    if (state.activity.at(-1).level === "rejected") {
+      $("error").textContent = state.activity.at(-1).message;
+      $("error").hidden = false;
+    }
+  } catch (error) { manualError(error); }
+  finally { manualBusy = false; controls(); }
+}
+
+async function refreshManual() {
+  if (mode !== "manual" || manualBusy || !manualState || !manualAvailable) return;
+  const epoch = manualEpoch;
+  try {
+    const state = await manualClient.state();
+    if (mode === "manual" && epoch === manualEpoch) renderManual(state);
+  } catch (error) {
+    if (mode === "manual" && epoch === manualEpoch) manualError(error);
+  }
+}
+
+document.querySelectorAll("[data-mode]").forEach(b => b.addEventListener("click", () => changeMode(b.dataset.mode)));
+$("manual-connect").addEventListener("click", openManual);
+$("stock-form").addEventListener("submit", event => {
+  event.preventDefault();
+  const action = event.submitter?.dataset.action;
+  if (["ADD_STOCK", "REMOVE_STOCK"].includes(action)) manualAction(action, $("stock-quantity").valueAsNumber);
+});
+$("buy-form").addEventListener("submit", event => {
+  event.preventDefault();
+  manualAction("BUY", $("buy-quantity").valueAsNumber);
+});
+for (const action of ["PAY", "CANCEL"]) {
+  document.querySelector(`[data-action="${action}"]`).addEventListener("click", () => manualAction(action, 1));
+}
 $("run").addEventListener("click", run);
 $("pause").addEventListener("click", () => replay.state === "playing" ? replay.pause() : replay.play());
 $("skip").addEventListener("click", () => { if (result && !busy) replay.finish(); });
@@ -205,5 +357,9 @@ $("log").addEventListener("wheel", e => { if (e.deltaY < 0) $("follow").checked 
 $("log").addEventListener("keydown", e => { if (["ArrowUp", "PageUp", "Home"].includes(e.key)) $("follow").checked = false; });
 document.querySelectorAll("[data-scenario]").forEach(b => b.addEventListener("click", () => choose(b.dataset.scenario)));
 choose(selected);
-async function poll() { await refreshStatus(); setTimeout(poll, 4000); }
+async function poll() {
+  if (mode === "manual") await refreshManual();
+  else await refreshStatus();
+  setTimeout(poll, 4000);
+}
 poll();

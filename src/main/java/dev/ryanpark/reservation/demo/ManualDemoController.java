@@ -1,0 +1,71 @@
+package dev.ryanpark.reservation.demo;
+
+import dev.ryanpark.reservation.common.ApiException;
+import dev.ryanpark.reservation.demo.ManualDemoService.Command;
+import dev.ryanpark.reservation.demo.ManualDemoService.State;
+import dev.ryanpark.reservation.demo.ManualDemoService.Workspace;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpSession;
+import jakarta.validation.Valid;
+import java.util.Set;
+import org.springframework.context.annotation.Profile;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.util.WebUtils;
+
+@RestController
+@Profile("demo")
+public class ManualDemoController {
+  private static final String WORKSPACE = ManualDemoController.class.getName() + ".workspace";
+  private final ManualDemoService manual;
+
+  public ManualDemoController(ManualDemoService manual) {
+    this.manual = manual;
+  }
+
+  @PostMapping("/api/demo/manual")
+  public State open(HttpServletRequest request) {
+    requireLocal(request);
+    var session = request.getSession();
+    synchronized (WebUtils.getSessionMutex(session)) {
+      var workspace = (Workspace) session.getAttribute(WORKSPACE);
+      if (workspace == null) {
+        workspace = manual.create();
+        session.setAttribute(WORKSPACE, workspace);
+      }
+      return manual.state(workspace);
+    }
+  }
+
+  @GetMapping("/api/demo/manual")
+  public State state(HttpServletRequest request) {
+    requireLocal(request);
+    return manual.state(workspace(request.getSession(false)));
+  }
+
+  @PostMapping("/api/demo/manual/actions")
+  public ResponseEntity<State> act(
+      @Valid @RequestBody Command command, HttpServletRequest request) {
+    requireLocal(request);
+    var outcome = manual.act(workspace(request.getSession(false)), command);
+    return ResponseEntity.status(outcome.statusCode()).body(outcome.state());
+  }
+
+  private Workspace workspace(HttpSession session) {
+    if (session == null || !(session.getAttribute(WORKSPACE) instanceof Workspace workspace)) {
+      throw new ApiException(
+          HttpStatus.NOT_FOUND, "MANUAL_NOT_STARTED", "Open manual mode to create a demo item");
+    }
+    return workspace;
+  }
+
+  private void requireLocal(HttpServletRequest request) {
+    if (!Set.of("localhost", "127.0.0.1", "::1", "[::1]").contains(request.getServerName())) {
+      throw new ApiException(HttpStatus.FORBIDDEN, "LOCAL_DEMO_ONLY", "Use localhost for the demo");
+    }
+  }
+}

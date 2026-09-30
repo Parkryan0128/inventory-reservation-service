@@ -38,23 +38,60 @@
 
     <div class="dashboard">
       <aside class="sidebar panel">
-        <h2 class="sidebar-heading">Scenarios</h2>
-        <nav class="scenario-nav" aria-label="Scenarios">
-          <button type="button" data-scenario="contention" aria-pressed="true">Concurrent reservations</button>
-          <button type="button" data-scenario="idempotency" aria-pressed="false">Duplicate requests</button>
-          <button type="button" data-scenario="race" aria-pressed="false">Payment vs cancel</button>
-          <button type="button" data-scenario="lifecycle" aria-pressed="false">Order lifecycle</button>
-          <button type="button" data-scenario="expiry" aria-pressed="false">Reservation expiry</button>
+        <nav class="mode-picker" aria-label="Demo mode">
+          <button type="button" id="scenarios-mode" data-mode="scenarios" aria-pressed="true" aria-controls="scenarios-panel">Scenarios</button>
+          <button type="button" id="manual-mode" data-mode="manual" aria-pressed="false" aria-controls="manual-panel">Manual</button>
         </nav>
+        <div id="scenarios-panel" class="mode-panel">
+          <nav class="scenario-nav" aria-label="Scenarios">
+            <button type="button" data-scenario="contention" aria-pressed="true">Concurrent reservations</button>
+            <button type="button" data-scenario="idempotency" aria-pressed="false">Duplicate requests</button>
+            <button type="button" data-scenario="race" aria-pressed="false">Payment vs cancel</button>
+            <button type="button" data-scenario="lifecycle" aria-pressed="false">Order lifecycle</button>
+            <button type="button" data-scenario="expiry" aria-pressed="false">Reservation expiry</button>
+          </nav>
 
-        <section class="scenario" aria-labelledby="scenario-title">
-          <h2 id="scenario-title">Concurrent reservations</h2>
-          <p id="description" class="scenario-description"></p>
-          <div class="scenario-copy">
-            <h3>In the backend</h3>
-            <p id="mechanism"></p>
-          </div>
-          <button type="button" id="run" class="primary" disabled>Run scenario</button>
+          <section class="scenario" aria-labelledby="scenario-title">
+            <h2 id="scenario-title">Concurrent reservations</h2>
+            <p id="description" class="scenario-description"></p>
+            <div class="scenario-copy">
+              <h3>In the backend</h3>
+              <p id="mechanism"></p>
+            </div>
+            <button type="button" id="run" class="primary" disabled>Run scenario</button>
+          </section>
+        </div>
+        <section id="manual-panel" class="manual-panel" aria-label="Manual controls" hidden>
+          <h2>Demo item</h2>
+          <p id="manual-product" class="resource-id">Connecting…</p>
+          <p class="manual-description">Change stock and buy from the same item. Only available stock can be removed.</p>
+          <button type="button" id="manual-connect" hidden>Reconnect</button>
+          <form id="stock-form" class="manual-group">
+            <h3>Change stock</h3>
+            <label for="stock-quantity">Quantity</label>
+            <input id="stock-quantity" type="number" min="1" max="10000" step="1" value="1" required />
+            <div class="manual-actions">
+              <button type="submit" data-action="ADD_STOCK" disabled>+ Add stock</button>
+              <button type="submit" data-action="REMOVE_STOCK" disabled>− Remove stock</button>
+            </div>
+          </form>
+          <form id="buy-form" class="manual-group">
+            <h3>Purchase</h3>
+            <label for="buy-quantity">Quantity</label>
+            <div class="purchase-action">
+              <input id="buy-quantity" type="number" min="1" max="10000" step="1" value="1" required />
+              <button type="submit" data-action="BUY" disabled>Buy</button>
+            </div>
+          </form>
+          <section id="manual-order" class="manual-group" aria-label="Current order" hidden>
+            <h3>Current order <span id="manual-order-status" role="status"></span></h3>
+            <p id="manual-order-id" class="resource-id"></p>
+            <p id="manual-order-detail" class="manual-description"></p>
+            <div id="manual-order-actions" class="manual-actions">
+              <button type="button" data-action="PAY" disabled>Confirm payment</button>
+              <button type="button" data-action="CANCEL" disabled>Cancel</button>
+            </div>
+          </section>
         </section>
       </aside>
 
@@ -75,7 +112,7 @@
           <button type="button" id="pause" hidden disabled>Pause</button>
           <button type="button" id="skip" hidden disabled>Show all</button>
           <button type="button" id="replay" hidden disabled>Replay</button>
-          <label>Speed <select id="speed"><option value="normal">Normal</option><option value="fast">Fast</option><option value="slow">Slow</option></select></label>
+          <label id="speed-control">Speed <select id="speed"><option value="normal">Normal</option><option value="fast">Fast</option><option value="slow">Slow</option></select></label>
           <label>Filter <select id="filter"><option value="all">All entries</option><option value="ok">Successful calls</option><option value="rejected">Rejected calls</option><option value="snapshot">Inventory snapshots</option></select></label>
           <label class="follow"><input type="checkbox" id="follow" checked /> Follow log</label>
         </div>

@@ -40,6 +40,13 @@ public class CatalogService {
         products.findById(id).orElseThrow(() -> ApiException.notFound("Product")));
   }
 
+  @Transactional
+  public ProductView adjustStock(UUID id, int delta) {
+    var product = products.lockById(id).orElseThrow(() -> ApiException.notFound("Product"));
+    product.adjustStock(delta);
+    return ProductView.from(product);
+  }
+
   @Transactional(readOnly = true)
   public List<ProductView> list(int page) {
     if (page < 0) throw ApiException.invalid("Page cannot be negative");

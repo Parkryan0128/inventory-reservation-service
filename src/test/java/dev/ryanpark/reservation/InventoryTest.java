@@ -116,4 +116,57 @@ class InventoryTest {
     var order = service.reserve("alice", new ReserveRequest(product(1), 1));
     assertThatThrownBy(() -> service.get("bob", order.id())).isInstanceOf(ApiException.class);
   }
+
+  @Test
+  void concurrentRemovalAndReservationShareTheSameStockLock() throws Exception {
+    var id = product(10);
+    var start = new CountDownLatch(1);
+    var futures = new ArrayList<Future<Boolean>>();
+    try (var pool = Executors.newFixedThreadPool(10)) {
+      for (int i = 0; i < 20; i++) {
+        final int index = i;
+        futures.add(
+            pool.submit(
+                () -> {
+                  start.await();
+                  try {
+                    if (index % 2 == 0) catalog.adjustStock(id, -1);
+                    else service.reserve("adjust-buyer-" + index, new ReserveRequest(id, 1));
+                    return true;
+                  } catch (ApiException rejected) {
+                    assertThat(rejected.code()).isEqualTo("INSUFFICIENT_STOCK");
+                    return false;
+                  }
+                }));
+      }
+      start.countDown();
+      int accepted = 0;
+      for (var future : futures) if (future.get(30, TimeUnit.SECONDS)) accepted++;
+      assertThat(accepted).isEqualTo(10);
+    }
+    var stock = catalog.get(id);
+    assertThat(stock.available()).isZero();
+    assertThat(stock.reserved()).isEqualTo(stock.initialStock());
+    assertThat(orders.countByProductId(id)).isEqualTo(stock.reserved());
+  }
+
+  @Test
+  void stockAdjustmentsRespectBoundsAndRollback() {
+    var id = product(1_000_000);
+    assertThatThrownBy(() -> catalog.adjustStock(id, 1)).isInstanceOf(ApiException.class);
+    assertThatThrownBy(() -> catalog.adjustStock(id, Integer.MIN_VALUE))
+        .isInstanceOf(ApiException.class);
+    assertThatThrownBy(() -> catalog.adjustStock(id, 0)).isInstanceOf(ApiException.class);
+    var before = catalog.get(id);
+    assertThatThrownBy(
+            () ->
+                new TransactionTemplate(transactions)
+                    .execute(
+                        status -> {
+                          catalog.adjustStock(id, -1);
+                          throw new IllegalStateException("rollback");
+                        }))
+        .isInstanceOf(IllegalStateException.class);
+    assertThat(catalog.get(id)).isEqualTo(before);
+  }
 }
