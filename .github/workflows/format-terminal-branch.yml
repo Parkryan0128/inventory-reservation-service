@@ -1,0 +1,29 @@
+name: Format terminal branch
+on:
+  push:
+    branches: [feat/terminal-inventory-dashboard]
+    paths: [.github/workflows/format-terminal-branch.yml]
+permissions:
+  contents: write
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/terminal-inventory-dashboard
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+      - run: ./mvnw -B -ntp spotless:apply
+      - name: Commit formatted Java and remove this one-time workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/main/java/dev/ryanpark/reservation/demo src/test/java/dev/ryanpark/reservation/DemoActivityTest.java src/test/java/dev/ryanpark/reservation/DemoActivityLogTest.java src/test/java/dev/ryanpark/reservation/PostgresDemoActivityIT.java
+          git rm .github/workflows/format-terminal-branch.yml
+          git commit -m "style: format recorded backend activity sources"
+          git push origin HEAD:feat/terminal-inventory-dashboard
