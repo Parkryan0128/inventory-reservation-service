@@ -4,7 +4,7 @@ An inventory reservation service built with Java 21 and Spring Boot.
 
 PostgreSQL handles stock and order transactions. Redis caches product metadata, and Kafka delivers order events through a transactional outbox.
 
-[One-click demo](docs/demo.md) · [Architecture](docs/architecture.md) · [API documentation](docs/api.md)
+[Inventory Playground](docs/demo.md) · [Architecture](docs/architecture.md) · [API documentation](docs/api.md)
 
 ## How it works
 
@@ -31,12 +31,12 @@ Each order contains one product. Payments are simulated.
 | Path | Contents |
 | --- | --- |
 | `src/main/java/` | Inventory, orders, security, cache, events, and demo scenarios |
-| `src/main/resources/` | Configuration, database migrations, and demo UI |
+| `src/main/resources/` | Configuration, database migrations, and playground UI |
 | `src/test/` | Java, JavaScript, and browser tests |
 | `scripts/` | HTTP smoke and contention checks |
 | `docs/` | Architecture, API reference, and validation results |
 
-## Run the demo
+## Run the playground
 
 Requires Docker with Compose v2.
 
@@ -44,11 +44,13 @@ Requires Docker with Compose v2.
 docker compose up --build -d
 ```
 
-Open [127.0.0.1:8080](http://127.0.0.1:8080/) and click **Run all 5 checks**. No login is needed. The page creates fresh demo products and checks concurrent reservations, idempotency, payment/cancellation/failure, competing order transitions, and expiry. Results come from real service calls and database reads, not a prerecorded animation.
+Open [127.0.0.1:8080](http://127.0.0.1:8080/) and click **Send 100 customers**. The single-page playground shows a fictional graphics card with five units, 100 customer responses, and the stock moving from available to reserved. Click a customer square to inspect its actual response and order ID. No login or manual product setup is needed.
 
-The main contention check submits 120 calls through 16 server worker threads for 25 units. It expects 25 reservations and 95 insufficient-stock rejections. This exercises the same transactional service as the API; it is not a benchmark of 120 simultaneous HTTP connections. The expiry check advances only its generated order's deadline to avoid waiting two minutes.
+Switch presets to try **Payment vs cancel**, **Duplicate request**, **Checkout & returns**, or **Abandoned checkout**. After execution, step through or replay the recorded database snapshots. Technical assertions and raw responses are expandable rather than the main experience.
 
-The demo is bound to localhost and enabled only under the `demo` profile. Do not expose this profile publicly. Configuration overrides are in [.env.example](.env.example).
+The flash sale submits 100 reservation service calls through 16 server worker threads for five units. It expects five reservations and 95 insufficient-stock rejections. Response squares are ordered by request number, not completion order. This is not a benchmark of 100 simultaneous HTTP connections. Replay uses real snapshots from the completed run, not invented transaction timing. The expiry preset advances only its generated order's deadline to avoid waiting two minutes.
+
+The demo is bound to localhost and enabled only under the `demo` profile. Do not expose this profile publicly. Configuration overrides are in [.env.example](.env.example); detailed behavior and test setup are in the [playground guide](docs/demo.md).
 
 The original [manual API workspace](http://127.0.0.1:8080/index.html) remains available for account/ownership testing:
 
@@ -73,10 +75,10 @@ Java tests require Java 21; JavaScript tests require Node.js 22 or newer.
 ```bash
 ./mvnw test      # Application and demo tests, including embedded Kafka
 ./mvnw verify    # Also runs PostgreSQL and Redis tests; requires Docker
-npm test        # Session and one-click orchestration tests
+npm test        # Session, response validation and playground logic
 ```
 
-Tests cover concurrent reservations, retries, order transitions, event delivery, cache outages, access control, and the no-login demo's isolation and error handling. Browser setup and recorded results are in [validation results](docs/validation.md).
+Tests cover concurrent reservations, retries, order transitions, event delivery, cache outages, access control, and the playground's isolation and error handling. Browser tests exercise the real scenarios, inspect individual responses, verify snapshot replay without new writes, and check mobile layout. See the [playground guide](docs/demo.md) for browser setup and [validation results](docs/validation.md) for earlier recorded acceptance runs.
 
 ## HTTP concurrency checks
 
@@ -87,7 +89,7 @@ python3 scripts/smoke.py
 python3 scripts/contention.py --requests 120 --stock 25 --workers 16
 ```
 
-The recorded CI run accepted 25 reservations and rejected the remaining 95 with insufficient stock. The script checks the final inventory and reports response counts and latency.
+This separate HTTP check uses 120 requests and 25 units. It checks the final inventory and reports response counts and latency. The browser's five-unit flash-sale preset is a different workload.
 
 ## Contact
 

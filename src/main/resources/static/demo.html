@@ -1,49 +1,73 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Inventory Reservation Lab</title>
-    <link rel="stylesheet" href="/demo.css" />
-    <script src="/demo.js" type="module"></script>
-  </head>
-  <body>
-    <header>
-      <a class="brand" href="/">reservations<span> / lab</span></a>
-      <span class="local">LOCAL DEMO</span>
-      <a href="/index.html">Manual API workspace ↗</a>
-    </header>
-    <main>
-      <section class="hero">
-        <div>
-          <p class="eyebrow">BACKEND, MADE VISIBLE</p>
-          <h1>25 items.<br />120 requests.<br /><span>No overselling.</span></h1>
-          <p class="lead">See what happens when requests compete for the same stock. One click creates fresh test data and checks the real backend. No login. No terminal juggling.</p>
-          <button id="run-all" class="primary" disabled>Run all 5 checks <span>→</span></button>
-          <p class="hint">Fixed, bounded workloads · new products each run · no real payments</p>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="One product. Competing customers. See real inventory transactions without signing in." />
+  <title>Inventory Playground</title>
+  <link rel="stylesheet" href="/demo.css" />
+  <script type="module" src="/demo.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/">inventory<span class="brand-mark">/</span><span>playground</span></a>
+    <span id="connection" class="connection" role="status">Connecting to backend…</span>
+  </header>
+  <main>
+    <section class="intro">
+      <p class="eyebrow">A BACKEND YOU CAN SEE</p>
+      <h1 id="headline">5 graphics cards.<br />100 customers.</h1>
+      <p id="description" class="lede">Everyone wants the last few. Can the system reserve exactly five, without promising the same unit twice?</p>
+    </section>
+    <nav class="presets" aria-label="Shopping scenarios">
+      <div class="primary-presets">
+        <button type="button" data-scenario="contention" aria-pressed="true"><span>01</span> Flash sale</button>
+        <button type="button" data-scenario="race" aria-pressed="false"><span>02</span> Payment vs cancel</button>
+        <button type="button" data-scenario="idempotency" aria-pressed="false"><span>03</span> Duplicate request</button>
+      </div>
+      <div class="secondary-presets"><span>Also try</span><button type="button" data-scenario="lifecycle" aria-pressed="false">Checkout & returns</button><button type="button" data-scenario="expiry" aria-pressed="false">Abandoned checkout</button></div>
+    </nav>
+    <section class="workspace" aria-label="Reservation playground">
+      <aside class="product-panel">
+        <div class="product-heading"><p class="eyebrow">LIMITED DROP</p><span class="tag">Fictional product</span></div>
+        <div class="product-art" aria-hidden="true"><div class="gpu"><div class="fan"></div><div class="fan"></div><div class="gpu-label">VECTOR / 01</div><div class="contacts"></div></div></div>
+        <div class="product-title"><div><h2>Vector One</h2><p>Graphics card · Founder's edition</p></div><strong id="price">CA$899</strong></div>
+        <div class="inventory-heading"><h3>Where is the stock?</h3><span id="inventory-mode" class="tag">Preset</span></div>
+        <div class="stock-lanes">
+          <section class="stock-lane available"><h4>Available</h4><strong id="available">5</strong><p>Ready to reserve</p><div id="units-available" class="units" aria-hidden="true"></div></section>
+          <section class="stock-lane reserved"><h4>Reserved</h4><strong id="reserved">0</strong><p>Held for payment</p><div id="units-reserved" class="units" aria-hidden="true"></div></section>
+          <section class="stock-lane sold"><h4>Sold</h4><strong id="sold">0</strong><p>Payment complete</p><div id="units-sold" class="units" aria-hidden="true"></div></section>
         </div>
-        <aside class="explainer">
-          <p class="eyebrow">WHAT THE MAIN CHECK DOES</p>
-          <div class="flow"><strong>120</strong><span>reservation requests</span></div>
-          <p class="arrow">↓ 16 server worker threads</p>
-          <div class="flow"><strong>25</strong><span>units in the database</span></div>
-          <div class="expected"><span>Expected: 25 accepted</span><span>95 out of stock</span></div>
-          <p>These are expected values, not a recorded result. Run the check to see your actual result below.</p>
-        </aside>
-      </section>
-      <section class="run-status" aria-live="polite" aria-atomic="true">
-        <div><strong id="summary">Connecting to the local demo…</strong><p id="detail">Checking server availability.</p></div>
-        <span id="database" class="tag">Database</span>
-      </section>
-      <progress id="progress" max="5" value="0" aria-label="Completed demo checks"></progress>
-      <section id="scenarios" class="scenario-grid" aria-label="Demo checks"></section>
-      <section class="events panel">
-        <div><p class="eyebrow">EVENT DELIVERY · OBSERVATION ONLY</p><h2>Outbox → Kafka → audit</h2><p id="event-status">Loading event status…</p></div>
-        <div class="event-counts"><div><strong id="pending">—</strong><span>Pending events</span></div><div><strong id="receipts">—</strong><span>Audit receipts</span></div></div>
-        <p class="hint">Counters include all application orders. They are not an exactly-once guarantee or an extra passed check. When Kafka is disabled, events stay in the outbox.</p>
-        <details><summary>Enable Kafka delivery locally</summary><pre>docker compose -f compose.yml -f compose.events.yml --profile events up --build -d</pre><p>The five checks above work without Kafka.</p></details>
-      </section>
-      <footer>Java 21 · Spring Boot · database transactions · real stock snapshots<br />Demo endpoints exist only under the demo profile. The manual API still checks authentication and ownership.</footer>
-    </main>
-  </body>
+        <p id="stock-equation" class="stock-equation">5 available + 0 reserved + 0 sold = 5 units</p>
+        <p id="stock-caption" class="muted">Preset preview. No database changes yet.</p>
+      </aside>
+      <div class="scenario-panel">
+        <div class="scene-heading"><h2 id="scene-title">The rush for the last five</h2><span id="phase" class="tag">READY</span></div>
+        <p id="scene-note" class="muted"></p>
+        <div id="visual" class="visual"></div>
+        <p id="request-detail" class="request-detail">Each square will show one customer's actual reservation result.</p>
+        <div class="run-bar"><button type="button" id="run" class="run-button" disabled>Send 100 customers <span aria-hidden="true">↗</span></button><p id="run-hint">100 calls · 16 server workers · 1 unit each</p></div>
+        <div id="outcome" class="outcome" role="status" aria-live="polite" aria-atomic="true"><h3 id="summary">Who gets a reservation?</h3><p id="outcome-note">Run the scenario to find out. Reservations are not completed sales.</p></div>
+        <div id="metrics" class="metrics"></div>
+      </div>
+    </section>
+    <section id="recording" class="recording" hidden aria-label="Recorded inventory changes">
+      <div class="recording-heading"><div><p class="eyebrow">FOLLOW THE STOCK</p><h2>Step through what actually happened.</h2></div><button type="button" id="replay" class="secondary-button">Replay stock changes</button></div>
+      <div id="snapshots" class="snapshots" aria-label="Database snapshots"></div>
+      <p class="muted">These are recorded database snapshots from this run, not a live stock feed. Replay only changes the view; it sends no new requests.</p>
+    </section>
+    <details class="backend" id="backend">
+      <summary>Under the hood <span>Transactions, assertions & raw response</span></summary>
+      <div class="backend-content">
+        <div class="architecture"><div><strong>Browser</strong><span>Starts one scenario</span></div><b aria-hidden="true">→</b><div><strong>Spring Boot</strong><span>Real transactional services</span></div><b aria-hidden="true">→</b><div><strong id="database-name">Database</strong><span>Row locks + atomic updates</span></div></div>
+        <p id="technical-note">The server runs the same reservation services as the normal API. Concurrency is generated by server workers, not by opening 100 browser connections.</p>
+        <p id="record-metadata" class="muted">No execution recorded yet.</p>
+        <ul id="assertions" class="assertions"></ul>
+        <details><summary>Raw response for this run</summary><pre id="raw">No response yet.</pre></details>
+        <p id="events" class="muted">Kafka is optional and is not part of the visual scenario.</p>
+      </div>
+    </details>
+    <footer><span>Real backend. Simulated payments. No sign-in.</span><a href="/index.html">Manual API workspace</a><p>Local demo only. Every run creates fresh test data; existing products and orders are left alone.</p></footer>
+  </main>
+</body>
 </html>
