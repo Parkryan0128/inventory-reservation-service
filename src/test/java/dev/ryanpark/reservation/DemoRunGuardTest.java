@@ -7,6 +7,7 @@ import static org.mockito.Mockito.*;
 import dev.ryanpark.reservation.common.ApiException;
 import dev.ryanpark.reservation.demo.DemoService;
 import dev.ryanpark.reservation.inventory.CatalogService;
+import dev.ryanpark.reservation.order.OrderPlacement;
 import dev.ryanpark.reservation.order.OrderService;
 import java.time.Clock;
 import java.util.concurrent.CountDownLatch;
@@ -31,7 +32,11 @@ class DemoRunGuardTest {
             });
     var demo =
         new DemoService(
-            catalog, mock(OrderService.class), mock(JdbcTemplate.class), Clock.systemUTC());
+            catalog,
+            mock(OrderService.class),
+            mock(OrderPlacement.class),
+            mock(JdbcTemplate.class),
+            Clock.systemUTC());
     try (var worker = Executors.newSingleThreadExecutor()) {
       var first = worker.submit(() -> demo.run("contention"));
       try {

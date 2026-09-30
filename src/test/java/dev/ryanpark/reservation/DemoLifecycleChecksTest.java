@@ -13,8 +13,10 @@ import dev.ryanpark.reservation.inventory.CatalogService;
 import dev.ryanpark.reservation.inventory.ProductDtos.ProductView;
 import dev.ryanpark.reservation.order.OrderDtos.OrderView;
 import dev.ryanpark.reservation.order.OrderDtos.ReserveRequest;
+import dev.ryanpark.reservation.order.OrderPlacement;
 import dev.ryanpark.reservation.order.OrderService;
 import dev.ryanpark.reservation.order.OrderStatus;
+import dev.ryanpark.reservation.order.ReservationRepository;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -118,7 +120,12 @@ class DemoLifecycleChecksTest {
     when(jdbc.queryForObject(
             "SELECT COUNT(*) FROM reservations WHERE product_id = ?", Long.class, productId))
         .thenReturn(3L);
-    return new DemoService(catalog, orders, jdbc, Clock.fixed(NOW, ZoneOffset.UTC));
+    return new DemoService(
+        catalog,
+        orders,
+        new OrderPlacement(orders, mock(ReservationRepository.class)),
+        jdbc,
+        Clock.fixed(NOW, ZoneOffset.UTC));
   }
 
   private ProductView stock(int available, int reserved, int sold) {

@@ -6,6 +6,7 @@ import dev.ryanpark.reservation.inventory.ProductDtos.CreateProduct;
 import dev.ryanpark.reservation.inventory.ProductDtos.ProductView;
 import dev.ryanpark.reservation.order.OrderDtos.OrderView;
 import dev.ryanpark.reservation.order.OrderDtos.ReserveRequest;
+import dev.ryanpark.reservation.order.OrderPlacement;
 import dev.ryanpark.reservation.order.OrderService;
 import dev.ryanpark.reservation.order.OrderStatus;
 import java.sql.Timestamp;
@@ -35,13 +36,20 @@ public class DemoService {
 
   private final CatalogService catalog;
   private final OrderService orders;
+  private final OrderPlacement placement;
   private final JdbcTemplate jdbc;
   private final Clock clock;
   private final AtomicBoolean running = new AtomicBoolean();
 
-  public DemoService(CatalogService catalog, OrderService orders, JdbcTemplate jdbc, Clock clock) {
+  public DemoService(
+      CatalogService catalog,
+      OrderService orders,
+      OrderPlacement placement,
+      JdbcTemplate jdbc,
+      Clock clock) {
     this.catalog = catalog;
     this.orders = orders;
+    this.placement = placement;
     this.jdbc = jdbc;
     this.clock = clock;
   }
@@ -86,7 +94,7 @@ public class DemoService {
                         1,
                         "request-" + index,
                         () ->
-                            orders.reserve(
+                            placement.place(
                                 owner + "-" + index,
                                 "request-" + index,
                                 new ReserveRequest(product.id(), 1))))
@@ -126,7 +134,7 @@ public class DemoService {
                         "reserve",
                         3,
                         "same-key",
-                        () -> orders.reserve(owner, "same-key", request)))
+                        () -> placement.place(owner, "same-key", request)))
             .toList();
     var attempts = new ArrayList<>(parallel(16, calls, log));
     var after = snapshot("After 16 identical requests", product, steps, log);
@@ -144,7 +152,7 @@ public class DemoService {
                 "reserve",
                 4,
                 "same-key",
-                () -> orders.reserve(owner, "same-key", new ReserveRequest(product.id(), 4))),
+                () -> placement.place(owner, "same-key", new ReserveRequest(product.id(), 4))),
             log);
     attempts.add(conflict);
     checks.put("Changed payload is rejected", conflict.code().equals("IDEMPOTENCY_CONFLICT"));
@@ -176,7 +184,7 @@ public class DemoService {
                 "reserve",
                 3,
                 "purchase",
-                () -> orders.reserve(owner, "purchase", new ReserveRequest(product.id(), 3))),
+                () -> placement.place(owner, "purchase", new ReserveRequest(product.id(), 3))),
             log);
     snapshot("Reserve 3 units", product, steps, log);
     var confirmed =
@@ -212,7 +220,7 @@ public class DemoService {
                 "reserve",
                 2,
                 "cancel",
-                () -> orders.reserve(owner, "cancel", new ReserveRequest(product.id(), 2))),
+                () -> placement.place(owner, "cancel", new ReserveRequest(product.id(), 2))),
             log);
     snapshot("Reserve 2 more units", product, steps, log);
     var cancellation =
@@ -249,7 +257,7 @@ public class DemoService {
                 "reserve",
                 2,
                 "failure",
-                () -> orders.reserve(owner, "failure", new ReserveRequest(product.id(), 2))),
+                () -> placement.place(owner, "failure", new ReserveRequest(product.id(), 2))),
             log);
     snapshot("Reserve 2 more units", product, steps, log);
     var paymentFailure =
@@ -300,7 +308,7 @@ public class DemoService {
                 "reserve",
                 1,
                 "race",
-                () -> orders.reserve(owner, "race", new ReserveRequest(product.id(), 1))),
+                () -> placement.place(owner, "race", new ReserveRequest(product.id(), 1))),
             log);
     var steps = new ArrayList<Snapshot>();
     snapshot("One reserved unit", product, steps, log);
@@ -355,7 +363,7 @@ public class DemoService {
                 "reserve",
                 2,
                 "expiry",
-                () -> orders.reserve(owner, "expiry", new ReserveRequest(product.id(), 2))),
+                () -> placement.place(owner, "expiry", new ReserveRequest(product.id(), 2))),
             log);
     var steps = new ArrayList<Snapshot>();
     snapshot("Two units reserved", product, steps, log);
