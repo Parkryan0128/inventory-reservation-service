@@ -25,17 +25,6 @@ services:
       timeout: 3s
       retries: 20
     mem_limit: 512m
-  redis:
-    <<: *runtime
-    image: redis:7.4-alpine
-    command: [redis-server, --maxmemory, 64mb, --maxmemory-policy, allkeys-lru, --save, "", --appendonly, "no"]
-    networks: [backend]
-    healthcheck:
-      test: [CMD, redis-cli, ping]
-      interval: 5s
-      timeout: 3s
-      retries: 20
-    mem_limit: 128m
   kafka:
     <<: *runtime
     image: apache/kafka:4.0.1
@@ -78,16 +67,10 @@ services:
       DATABASE_URL: jdbc:postgresql://postgres:5432/reservations?options=-c%20lock_timeout=5000
       DATABASE_USER: reservations
       DATABASE_PASSWORD: ${DATABASE_PASSWORD:?Set DATABASE_PASSWORD}
-      ALICE_PASSWORD: ${ALICE_PASSWORD:?Set ALICE_PASSWORD}
-      BOB_PASSWORD: ${BOB_PASSWORD:?Set BOB_PASSWORD}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD}
-      REDIS_HOST: redis
-      CACHE_ENABLED: "true"
       EVENTS_ENABLED: "true"
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
     depends_on:
       postgres: {condition: service_healthy}
-      redis: {condition: service_healthy}
       kafka: {condition: service_healthy}
     networks:
       backend:

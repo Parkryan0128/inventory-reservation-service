@@ -8,7 +8,6 @@ import dev.inventory.inventory.*;
 import dev.inventory.inventory.ProductDtos.CreateProduct;
 import dev.inventory.order.*;
 import dev.inventory.order.OrderDtos.ReserveRequest;
-import java.net.*;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
@@ -25,59 +24,17 @@ import org.testcontainers.containers.GenericContainer;
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 @DirtiesContext
 class RedisIntegrationIT {
-  static GenericContainer<?> container;
-  static Process process;
-  static String host;
-  static int port;
+  private static final GenericContainer<?> REDIS =
+      new GenericContainer<>("redis:7.4-alpine").withExposedPorts(6379);
 
   static {
-    try {
-      var binary = System.getenv("TEST_REDIS_BINARY");
-      if (binary == null || binary.isBlank()) {
-        container = new GenericContainer<>("redis:7.4-alpine").withExposedPorts(6379);
-        container.start();
-        host = container.getHost();
-        port = container.getMappedPort(6379);
-      } else {
-        host = "127.0.0.1";
-        try (var socket = new ServerSocket(0)) {
-          port = socket.getLocalPort();
-        }
-        process =
-            new ProcessBuilder(
-                    binary,
-                    "--bind",
-                    host,
-                    "--port",
-                    String.valueOf(port),
-                    "--save",
-                    "",
-                    "--appendonly",
-                    "no")
-                .redirectOutput(ProcessBuilder.Redirect.DISCARD)
-                .redirectError(ProcessBuilder.Redirect.DISCARD)
-                .start();
-        await()
-            .pollInSameThread()
-            .atMost(Duration.ofSeconds(10))
-            .until(
-                () -> {
-                  try (var socket = new Socket(host, port)) {
-                    return socket.isConnected();
-                  } catch (Exception exception) {
-                    return false;
-                  }
-                });
-      }
-    } catch (Exception exception) {
-      throw new ExceptionInInitializerError(exception);
-    }
+    REDIS.start();
   }
 
   @DynamicPropertySource
   static void properties(DynamicPropertyRegistry registry) {
-    registry.add("spring.data.redis.host", () -> host);
-    registry.add("spring.data.redis.port", () -> port);
+    registry.add("spring.data.redis.host", REDIS::getHost);
+    registry.add("spring.data.redis.port", () -> REDIS.getMappedPort(6379));
   }
 
   @Autowired CatalogMetadataService metadata;
@@ -120,7 +77,7 @@ class RedisIntegrationIT {
 
   @Test
   @Order(3)
-  void actualRedisOutageStillServesCatalogAndPreservesInventory() throws Exception {
+  void actualRedisOutageStillServesCatalogAndPreservesInventory() {
     var id = product();
     stop();
     assertThat(metadata.get(id).priceCents()).isEqualTo(999);
@@ -133,11 +90,7 @@ class RedisIntegrationIT {
   }
 
   @AfterAll
-  static void stop() throws Exception {
-    if (container != null && container.isRunning()) container.stop();
-    if (process != null && process.isAlive()) {
-      process.destroy();
-      if (!process.waitFor(5, TimeUnit.SECONDS)) process.destroyForcibly();
-    }
+  static void stop() {
+    if (REDIS.isRunning()) REDIS.stop();
   }
 }

@@ -1,4 +1,4 @@
-import { DemoClient, ManualClient, Replay, entryLevel, inventoryAt, summarize } from "./demo-client.js";
+import { DemoClient, ManualClient, Replay, entryLevel, inventoryAt, recordingPassed } from "./demo-client.js";
 
 const presets = {
   contention: {
@@ -151,15 +151,15 @@ function appendEntry(e) {
 }
 function showResult() {
   if (!result) return;
-  const summary = summarize(result);
+  const passed = recordingPassed(result);
   $("result").hidden = false;
-  $("verification").textContent = summary.ok ? "Checks passed" : "Checks failed";
-  $("verification").className = summary.ok ? "pass" : "fail";
+  $("verification").textContent = passed ? "Checks passed" : "Checks failed";
+  $("verification").className = passed ? "pass" : "fail";
   const last = result.snapshots.at(-1).inventory;
   const checks = Object.entries(result.checks);
-  if (!summary.ok && checks.every(([, v]) => v)) checks.push(["Returned counts and stock match the scenario", false]);
+  if (!passed && checks.every(([, v]) => v)) checks.push(["Server checks and stock balance pass", false]);
   $("assertions").replaceChildren(...checks.map(([label, passed]) => element("li", `${passed ? "✓" : "✕"} ${label}`, passed ? "" : "failed")));
-  $("check-details").open = !summary.ok;
+  $("check-details").open = !passed;
   $("record-metadata").textContent = `Server execution: ${result.durationMs} ms`;
   inventory(last, "Final recorded snapshot");
 }

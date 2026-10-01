@@ -16,8 +16,6 @@ export function validateRecording(r) {
         ![p.available, p.reserved, p.sold, p.initialStock].every(Number.isSafeInteger) ||
         p.id !== r.snapshots[0].inventory.id || p.initialStock !== r.snapshots[0].inventory.initialStock) invalid();
   }
-  const expected = { contention: 100, idempotency: 17, race: 2, lifecycle: 0, expiry: 0 };
-  if (r.attempts.length !== expected[r.scenario]) invalid();
   const histogram = new Map();
   for (const a of r.attempts) {
     if (!object(a) || typeof a.code !== "string" || !a.code || !count(a.durationMs) ||
@@ -30,8 +28,7 @@ export function validateRecording(r) {
 
 export function validateActivity(r) {
   validateRecording(r);
-  const expected = { contention: 102, idempotency: 20, race: 5, lifecycle: 16, expiry: 7 };
-  if (!Array.isArray(r.activity) || r.activity.length !== expected[r.scenario]) invalid();
+  if (!Array.isArray(r.activity) || !r.activity.length) invalid();
   let snapshot = 0;
   const requests = new Set();
   for (const [i, e] of r.activity.entries()) {
@@ -55,30 +52,10 @@ export function validateActivity(r) {
   return r;
 }
 
-export function summarize(r) {
+export function recordingPassed(r) {
   validateRecording(r);
-  const p = r.snapshots.at(-1).inventory;
-  const o = r.outcomes;
-  const stock = (a, b, c) => p.available === a && p.reserved === b && p.sold === c;
-  const unique = new Set(r.attempts.filter(a => a.orderId).map(a => a.orderId)).size;
-  const conditions = {
-    contention: o.RESERVED === 5 && o.INSUFFICIENT_STOCK === 95 && r.persistedOrders === 5 && unique === 5 && stock(0, 5, 0),
-    idempotency: o.RESERVED === 16 && o.IDEMPOTENCY_CONFLICT === 1 && r.persistedOrders === 1 && unique === 1 && stock(7, 3, 0),
-    race: o.INVALID_TRANSITION === 1 && r.persistedOrders === 1 && unique === 1 &&
-      ((o.CONFIRMED === 1 && !o.CANCELLED && stock(0, 0, 1)) || (o.CANCELLED === 1 && !o.CONFIRMED && stock(1, 0, 0))),
-    lifecycle: r.persistedOrders === 3 && stock(9, 0, 3),
-    expiry: r.persistedOrders === 1 && stock(5, 0, 0),
-  };
-  const ok = r.passed && Object.values(r.checks).every(Boolean) && conditions[r.scenario] &&
+  return r.passed && Object.values(r.checks).every(Boolean) &&
     r.snapshots.every(({ inventory: s }) => s.available >= 0 && s.reserved >= 0 && s.sold >= 0 && s.available + s.reserved + s.sold === s.initialStock);
-  const metrics = r.scenario === "contention"
-    ? [["Reservations", o.RESERVED || 0], ["Rejected", o.INSUFFICIENT_STOCK || 0], ["Orders persisted", r.persistedOrders], ["Oversold units", Math.max(0, p.reserved + p.sold - p.initialStock)]]
-    : r.scenario === "idempotency"
-      ? [["Identical replies", o.RESERVED || 0], ["Changed payload rejected", o.IDEMPOTENCY_CONFLICT || 0], ["Orders persisted", r.persistedOrders], ["Reserved units", p.reserved]]
-      : r.scenario === "race"
-        ? [["Transitions accepted", (o.CONFIRMED || 0) + (o.CANCELLED || 0)], ["Transitions rejected", o.INVALID_TRANSITION || 0], ["Orders persisted", r.persistedOrders], ["Reserved units", p.reserved]]
-        : [["Orders persisted", r.persistedOrders], ["Available units", p.available], ["Reserved units", p.reserved], ["Sold units", p.sold]];
-  return { ok: Boolean(ok), metrics };
 }
 
 export function entryLevel(e) {

@@ -18,7 +18,7 @@ Buy → RESERVED
 - Idempotency keys prevent duplicate reservations. Reusing a key with a different product or quantity returns a conflict.
 - Payment, cancellation, and expiry lock the order and product so stock changes once. The database enforces `available + reserved + sold = initial_stock`.
 - An outbox relay publishes order events to Kafka with retries. An audit consumer deduplicates events; delivery is at least once.
-- Redis caches product metadata for 30 seconds and falls back to PostgreSQL on failure. Stock and order prices always come from PostgreSQL.
+- The catalog API uses Redis to cache product metadata for 30 seconds, falling back to PostgreSQL on failure. The public demo reads PostgreSQL directly and runs without Redis.
 
 Each order contains one product. Payments are simulated.
 

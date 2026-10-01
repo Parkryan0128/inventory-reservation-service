@@ -19,6 +19,7 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.context.RequestAttributeSecurityContextRepository;
 
 @Configuration
+@Profile("!public-demo")
 public class SecurityConfiguration {
   @Bean
   InMemoryUserDetailsManager users(
@@ -45,7 +46,6 @@ public class SecurityConfiguration {
   }
 
   @Bean
-  @Profile("!public-demo")
   SecurityFilterChain security(HttpSecurity http, ObjectMapper json) throws Exception {
     AuthenticationEntryPoint unauthorized =
         (req, res, ex) -> problem(json, res, 401, "UNAUTHENTICATED");

@@ -19,10 +19,7 @@ trap 'rm -f "$env_temp"' EXIT
 {
   printf 'DEMO_HOST=%s\n' "$demo_host"
   printf 'APP_IMAGE=ghcr.io/parkryan0128/inventory-reservation-service:sha-%s\n' "$revision"
-  for key in DATABASE_PASSWORD ALICE_PASSWORD BOB_PASSWORD ADMIN_PASSWORD; do
-    password=$(openssl rand -hex 24)
-    printf '%s=%s\n' "$key" "$password"
-  done
+  printf 'DATABASE_PASSWORD=%s\n' "$(openssl rand -hex 24)"
 } > "$env_temp"
 # Linking fails if another setup process created the destination in the meantime.
 ln "$env_temp" deploy/.env.production

@@ -1,5 +1,7 @@
 # Public demo endpoints only; normal customer/admin APIs are denied by PublicDemoSecurity.
 spring:
+  autoconfigure:
+    exclude: org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
   datasource:
     password: ${DATABASE_PASSWORD}
 server:

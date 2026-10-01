@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { DemoClient, Replay, scenarios, validateRecording, validateActivity, summarize, inventoryAt, entryLevel } from "../../main/resources/static/demo-client.js";
+import { DemoClient, Replay, scenarios, validateRecording, validateActivity, recordingPassed, inventoryAt, entryLevel } from "../../main/resources/static/demo-client.js";
 import { recording } from "./fixtures.js";
 const response = (body, status = 200) => ({ ok: status >= 200 && status < 300, status, json: async () => body });
 function fetcher(log, overrides = {}) {
@@ -15,7 +15,7 @@ function fetcher(log, overrides = {}) {
 test("every scenario has consistent attempts, activity, snapshots and summaries", () => {
   for (const name of scenarios) {
     assert.equal(validateActivity(recording(name)).scenario, name);
-    assert.equal(summarize(recording(name)).ok, true);
+    assert.equal(recordingPassed(recording(name)), true);
   }
 });
 test("selected scenarios execute once with CSRF and no embedded credentials", async () => {
@@ -36,7 +36,7 @@ test("selected scenarios execute once with CSRF and no embedded credentials", as
 test("server assertion failure stays failed without inventing success", async () => {
   const r = recording(); r.passed = false;
   const result = await new DemoClient(fetcher([], { contention: response(r) })).run(["contention"]);
-  assert.equal(summarize(result[0]).ok, false);
+  assert.equal(recordingPassed(result[0]), false);
 });
 test("transport errors stop execution without retrying writes", async () => {
   const log = [], finished = [];
@@ -98,19 +98,28 @@ test("activity requires exact order, complete snapshots and matching attempts", 
     const r = recording(); mutate(r); assert.throws(() => validateActivity(r), /invalid demo result/);
   }
 });
-test("invented passes, inconsistent counts and negative inventory are not successes", () => {
-  for (const mutate of [r => r.passed = false, r => r.checks.extra = false, r => r.persistedOrders = 6,
+test("recordings can vary request and log counts without duplicating scenario rules", () => {
+  const r = recording();
+  r.attempts.pop();
+  r.outcomes.INSUFFICIENT_STOCK--;
+  r.activity.splice(-2, 1);
+  r.activity.forEach((entry, i) => { entry.sequence = i + 1; });
+  assert.equal(validateActivity(r), r);
+  assert.equal(recordingPassed(r), true);
+});
+test("failed server checks and invalid stock balances are not successes", () => {
+  for (const mutate of [r => r.passed = false, r => r.checks.extra = false,
     r => r.snapshots[1].inventory.reserved = 6, r => r.snapshots[1].inventory.available = -1]) {
-    const r = recording(); mutate(r); assert.equal(summarize(r).ok, false);
+    const r = recording(); mutate(r); assert.equal(recordingPassed(r), false);
   }
 });
 test("either payment/cancel winner is supported", () => {
   const r = recording("race");
-  assert.equal(summarize(r).ok, true);
+  assert.equal(recordingPassed(r), true);
   r.attempts = [{ code: "INVALID_TRANSITION", orderId: null, durationMs: 5 }, { code: "CANCELLED", orderId: "order-1", durationMs: 5 }];
   r.outcomes = { CANCELLED: 1, INVALID_TRANSITION: 1 };
   Object.assign(r.snapshots[1].inventory, { available: 1, sold: 0 });
-  assert.equal(summarize(r).ok, true);
+  assert.equal(recordingPassed(r), true);
 });
 test("progress inventory is explicitly derived; retries move stock only once", () => {
   const r = recording();

@@ -32,6 +32,8 @@ jobs:
           docker compose up -d
           python3 scripts/smoke.py --wait 150 --require-events
           python3 scripts/contention.py --requests 120 --stock 25 --workers 16
+      - name: Deployment image retention
+        run: bash scripts/check-image-cleanup.sh
       - name: Browser acceptance against Compose
         run: |
           npm ci

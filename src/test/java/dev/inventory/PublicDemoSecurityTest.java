@@ -13,7 +13,14 @@ import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
-@SpringBootTest(properties = {"DEMO_HOST=inventory.example.com", "app.demo.scenario-interval=PT0S"})
+@SpringBootTest(
+    properties = {
+      "DEMO_HOST=inventory.example.com",
+      "app.demo.scenario-interval=PT0S",
+      "app.security.alice-password=",
+      "app.security.bob-password=",
+      "app.security.admin-password="
+    })
 @ActiveProfiles({"public-demo", "test"})
 @AutoConfigureMockMvc
 class PublicDemoSecurityTest {

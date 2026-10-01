@@ -29,7 +29,7 @@ proxy=("${docker_command[@]}" compose --env-file deploy/.env.production -f deplo
 "${proxy[@]}" pull
 "${docker_command[@]}" network inspect portfolio-edge >/dev/null 2>&1 || "${docker_command[@]}" network create portfolio-edge
 "${proxy[@]}" run --rm --no-deps caddy caddy validate --config /etc/caddy/Caddyfile
-"${app[@]}" up -d --wait --wait-timeout 300
+"${app[@]}" up -d --remove-orphans --wait --wait-timeout 300
 "${proxy[@]}" up -d --wait --wait-timeout 60
 "${proxy[@]}" exec -T caddy caddy reload --config /etc/caddy/Caddyfile
 
@@ -46,4 +46,7 @@ env_temp=$(mktemp deploy/.env.production.XXXXXX)
 trap 'rm -f "$env_temp"' EXIT
 awk -v image="$APP_IMAGE" '/^APP_IMAGE=/ {$0="APP_IMAGE=" image} {print}' deploy/.env.production > "$env_temp"
 mv "$env_temp" deploy/.env.production
+if ! bash deploy/prune-images.sh "${docker_command[@]}"; then
+  echo 'Deployment succeeded, but old image cleanup did not finish.' >&2
+fi
 printf '\nDeployed %s\nOpen https://%s/\n' "$APP_IMAGE" "$demo_host"
