@@ -1,103 +1,108 @@
-# Java Inventory Reservation Service
+# Inventory Reservation Service
 
-An inventory reservation service built with Java 21 and Spring Boot.
+An inventory reservation service built with Java 21, Spring Boot, PostgreSQL, Redis, and Kafka.
 
-PostgreSQL handles stock and order transactions. Redis caches product metadata, and Kafka delivers order events through a transactional outbox.
-
-[Dashboard guide](docs/demo.md) · [Architecture](docs/architecture.md) · [API documentation](docs/api.md)
+[Live demo](https://inventory.ryanparkdev.com/)
 
 ## How it works
 
-```mermaid
-stateDiagram-v2
-    direction TB
-    [*] --> RESERVED
-    RESERVED --> CONFIRMED: Payment succeeds
-    RESERVED --> CANCELLED: Customer cancels
-    RESERVED --> PAYMENT_FAILED: Payment fails
-    RESERVED --> EXPIRED: Reservation expires
+```text
+Buy → RESERVED
+        ├── Payment succeeds → CONFIRMED
+        ├── Payment fails    → PAYMENT_FAILED
+        ├── Customer cancels → CANCELLED
+        └── 2 minutes pass   → EXPIRED
 ```
 
-A reservation locks the product row and saves the stock change, order, and outbox event in one transaction. Retrying with the same customer, idempotency key, and payload returns the existing order.
-
-Payment, cancellation, and expiry share a locked transition so stock changes only once. The database enforces `available + reserved + sold = initial_stock`.
-
-The Kafka relay retries failed deliveries, and the consumer deduplicates audit events. Redis is used only for metadata; inventory and order prices come from PostgreSQL.
+- Reservations lock the product row and save the stock change, order, and outbox event in one PostgreSQL transaction.
+- Idempotency keys prevent duplicate reservations. Reusing a key with a different product or quantity returns a conflict.
+- Payment, cancellation, and expiry lock the order and product so stock changes once. The database enforces `available + reserved + sold = initial_stock`.
+- An outbox relay publishes order events to Kafka with retries. An audit consumer deduplicates events; delivery is at least once.
+- Redis caches product metadata for 30 seconds and falls back to PostgreSQL on failure. Stock and order prices always come from PostgreSQL.
 
 Each order contains one product. Payments are simulated.
 
+The demo has five scenarios: concurrent reservations, duplicate requests, payment versus cancellation, the order lifecycle, and expiry. Scenarios execute real backend operations, then replay the recorded results. The contention scenario uses 100 service calls across 16 workers for five units; the expiry scenario advances its test order's deadline.
+
+Manual mode lets visitors add/remove stock and reserve the same shared product. Each visitor can pay or cancel only their own orders. Stock and orders persist across restarts; browser sessions and the last 200 activity entries are held in memory. The demo runs as one application instance.
+
 ## Project structure
 
-| Path | Contents |
-| --- | --- |
-| `src/main/java/` | Inventory, orders, security, cache, events, and demo scenarios |
-| `src/main/resources/` | Configuration, database migrations, and dashboard UI |
-| `src/test/` | Java, JavaScript, and browser tests |
-| `scripts/` | HTTP smoke and contention checks |
-| `docs/` | Architecture, API reference, and validation results |
+```text
+src/main/java/dev/inventory/  Application code
+src/main/resources/          Configuration, SQL migrations, and demo UI
+src/test/                    Java, JavaScript, and browser tests
+scripts/                     HTTP and deployment checks used by CI
+deploy/                      Production Compose, HTTPS proxy, and deployment scripts
+```
 
-## Run the dashboard
+## Run locally
 
-Requires Docker with Compose v2.
+Requires Docker with Compose.
 
 ```bash
 docker compose up --build -d
 ```
 
-Open [127.0.0.1:8080](http://127.0.0.1:8080/) and click **Run scenario**. The page explains the three-step purchase and reservation flow, then shows each scenario's setup and backend behavior beside the Backend activity terminal. The terminal shows inventory counters at the top and recorded results at the bottom. No login or manual product setup is needed.
+Open [localhost:8080](http://localhost:8080/). This starts the application, PostgreSQL, Redis, and Kafka. Local overrides are in [.env.example](.env.example).
 
-Choose **Manual** to use one shared item with every visitor. It starts with 5 units only when first created; existing stock survives new sessions and server restarts. Add or remove up to 10 available units, buy a quantity, then confirm payment or cancel **your own order**. Separate browsers compete for the same stock. The terminal shows the latest 200 shared events, labelled **You**, an anonymous visitor, or **System** for expiry. Changes from other visitors are polled every four seconds; writes are never automatically retried. Actions are limited to one per 500 ms per session. Scenario fixtures remain separate from this shared item.
+## API
 
-The default scenario submits 100 reservation service calls through 16 server workers for five units. It expects five reservations and 95 insufficient-stock rejections. Other presets cover duplicate requests, payment versus cancellation, the order lifecycle, and expiry.
+The local API uses HTTP Basic authentication with `alice`, `bob`, and `admin`; default passwords are in `.env.example`. Writes also require the session cookie and CSRF header returned by `GET /api/csrf`. Customers can access only their own orders.
 
-The server records each completed service call. The browser replays those records progressively, with pause/resume, speed, filtering and replay controls. Log order is server observation order, not a reconstructed commit order. This is not a live HTTP/SQL log or a benchmark of 100 simultaneous browser connections. During reservation playback, derived inventory counts are explicitly labelled and reconciled with the recorded database snapshots. The expiry fixture advances only its generated order's deadline to avoid waiting two minutes.
-
-The local Compose setup uses the localhost-only `demo` profile. Do not expose this profile publicly. Configuration overrides are in [.env.example](.env.example); detailed behavior and test setup are in the [dashboard guide](docs/demo.md).
-
-For a public portfolio deployment, use the separate `public-demo` profile and the [VPS deployment guide](docs/deployment.md). It exposes the demo without opening the normal customer/admin APIs, preserves CSRF and session ownership, and serves HTTPS through Caddy. GitHub Actions publishes a commit-tagged image only after both local and public deployment checks pass; the VPS pulls that tested image.
-
-The original [manual API workspace](http://127.0.0.1:8080/index.html) remains available for account/ownership testing:
-
-| Local account | Password |
+| Endpoint | Purpose |
 | --- | --- |
-| `alice` | `demo-alice-password` |
-| `bob` | `demo-bob-password` |
-| `admin` | `demo-admin-password` |
+| `GET /api/me` | Current account and roles |
+| `GET /api/products`, `GET /api/products/{id}` | Products and current stock |
+| `POST /api/products` | Create a product (admin) |
+| `GET /api/catalog/{id}` | Cached product metadata |
+| `POST /api/orders` | Reserve stock; requires `Idempotency-Key` |
+| `GET /api/orders`, `GET /api/orders/{id}` | View orders |
+| `POST /api/orders/{id}/cancel` | Cancel a reservation |
+| `POST /api/admin/payments/{id}` | Simulate payment with `{"success":true}` or `false` |
+| `GET /api/admin/orders`, `GET /api/admin/status` | Orders and event delivery status (admin) |
+| `GET /actuator/health`, `GET /actuator/prometheus` | Health and metrics; metrics require admin |
 
-Use `admin` to create products and simulate payments, or `alice` and `bob` to reserve stock and view their own orders. Unpaid reservations expire after two minutes.
+Reserve with `{"productId":"<uuid>","quantity":2}`. Matching retries return the same order ID and its current status. Quantities and prices are integers; prices use cents. Errors return HTTP status codes and a JSON `code`, such as `INSUFFICIENT_STOCK` or `IDEMPOTENCY_CONFLICT`.
 
-To enable Kafka delivery:
-
-```bash
-docker compose -f compose.yml -f compose.events.yml --profile events up --build -d
-```
+The public deployment exposes only the demo and health endpoint. Its writes require CSRF protection and the configured hostname; normal customer/admin APIs are closed.
 
 ## Tests
 
-Java tests require Java 21; JavaScript tests require Node.js 22 or newer.
+Requires Java 21, Node.js 22+, and Docker. The browser and HTTP checks use the running local stack.
 
 ```bash
-./mvnw test      # Application and demo tests, including embedded Kafka
-./mvnw verify    # Also runs PostgreSQL and Redis tests; requires Docker
-npm test        # Session, response validation and terminal replay logic
-```
-
-Tests cover concurrent reservations, retries, order transitions, event delivery, cache outages, access control, recorded activity, and demo isolation. Browser tests exercise progressive terminal rendering against Compose, inspect actual outcomes, verify playback without new writes, and check mobile layout and reduced motion. See the [dashboard guide](docs/demo.md) and [validation results](docs/validation.md) for test setup and earlier recorded acceptance runs.
-
-## HTTP concurrency checks
-
-With the demo running and Python 3 installed:
-
-```bash
-python3 scripts/smoke.py
+./mvnw verify
+npm ci
+npm test
+npx playwright install chromium
+npm run test:browser
+python3 scripts/smoke.py --require-events
 python3 scripts/contention.py --requests 120 --stock 25 --workers 16
 ```
 
-This separate HTTP check uses 120 requests and 25 units. It checks the final inventory and reports response counts and latency. The dashboard's five-unit scenario is a different workload.
+Tests cover concurrent stock updates, retries, order transitions, PostgreSQL constraints, Kafka delivery, Redis outages, access control, and the demo UI. CI runs these checks and the production stack over HTTPS before publishing an image.
 
-## Contact
+## Deploy
 
-- **Name:** Ryan Park
-- **Email:** [parkryan0128@gmail.com](mailto:parkryan0128@gmail.com)
-- **LinkedIn:** [linkedin.com/in/parkryan0128](https://www.linkedin.com/in/parkryan0128)
-- **GitHub:** [github.com/Parkryan0128](https://github.com/Parkryan0128)
+The VPS uses Docker Compose and Caddy for HTTPS. Point the hostname to the VPS and allow ports 80/443. After the commit's CI build succeeds, run in the server checkout:
+
+```bash
+bash deploy/init-env.sh inventory.example.com
+bash deploy/up.sh
+```
+
+Credentials are generated in the Git-ignored `deploy/.env.production`. Images come from GHCR; no build runs on the VPS. Named volumes preserve database and Kafka data, so do not remove them to update the app.
+
+Automatic deployment uses `deploy/install-cd-keys.sh` from `~/apps/inventory-reservation-service` as `ubuntu`. Configure GitHub secrets `DEPLOY_SSH_KEY` and `DEPLOY_KNOWN_HOSTS`, plus variables `DEPLOY_HOST`, `DEPLOY_USER`, and `DEPLOY_ENABLED=true`. Each main push must pass CI before the Deploy workflow updates the VPS.
+
+The Caddy proxy is shared with OptiRoute through `portfolio-edge`. Its additional site configuration lives in Git-ignored `deploy/proxy/sites/*.local.caddy`. Deployment scripts serialize updates with a shared lock.
+
+Manual update and rollback:
+
+```bash
+git pull --ff-only origin main
+bash deploy/up.sh
+# Restore the previous image if it supports the current database schema:
+bash deploy/up.sh "$(cat deploy/.previous-image)"
+```

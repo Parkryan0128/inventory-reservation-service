@@ -19,17 +19,17 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - name: Demo session regression tests
+      - name: Demo client tests
         run: npm test
       - name: Unit, HTTP, Kafka, PostgreSQL and Redis acceptance
         run: ./mvnw -B -ntp verify
       - name: Validate Compose configuration and image build
         run: |
-          docker compose -f compose.yml -f compose.events.yml --profile events config --quiet
+          docker compose config --quiet
           docker compose build app
       - name: End-to-end Compose smoke
         run: |
-          docker compose -f compose.yml -f compose.events.yml --profile events up -d
+          docker compose up -d
           python3 scripts/smoke.py --wait 150 --require-events
           python3 scripts/contention.py --requests 120 --stock 25 --workers 16
       - name: Browser acceptance against Compose
@@ -53,7 +53,7 @@ jobs:
       - name: Logs
         if: failure()
         run: |
-          docker compose -f compose.yml -f compose.events.yml --profile events logs --no-color
+          docker compose logs --no-color
           if [ -f deploy/.env.production ]; then
             APP_IMAGE=inventory-public-ci:tested docker compose --env-file deploy/.env.production -f deploy/compose.yml logs --no-color
           fi
@@ -61,7 +61,7 @@ jobs:
       - name: Stop services
         if: always()
         run: |
-          docker compose -f compose.yml -f compose.events.yml --profile events down -v
+          docker compose down -v
           docker rm -fv inventory-proxy-ci 2>/dev/null || true
           if [ -f deploy/.env.production ]; then
             APP_IMAGE=inventory-public-ci:tested docker compose --env-file deploy/.env.production -f deploy/compose.yml down -v

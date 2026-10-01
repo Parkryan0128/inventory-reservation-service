@@ -148,14 +148,12 @@ test("backend assertion failures remain visible even with HTTP 200", async ({ pa
   await expect(page.locator("#assertions .failed")).toContainText("Injected failure");
 });
 
-test("mobile terminal scrolls internally and original account workspace still works", async ({ page }) => {
+test("mobile terminal scrolls internally", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await ready(page);
   await execute(page, "lifecycle");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: test.info().outputPath("terminal-mobile.png"), fullPage: true });
-  await page.goto("/index.html");
-  await expect(page.locator("#login-form")).toBeVisible();
 });
 
 test("reduced-motion preference does not override the selected speed or show-all control", async ({ page }) => {

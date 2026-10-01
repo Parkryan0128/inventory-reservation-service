@@ -6,3 +6,6 @@ deploy/.deployed-image
 deploy/.previous-image
 *.log
 *.zip
+node_modules
+test-results
+playwright-report

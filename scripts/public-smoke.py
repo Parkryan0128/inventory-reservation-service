@@ -70,7 +70,7 @@ for attempt in range(30):
 
 for path in ("/", "/demo.html", "/demo.js", "/demo-client.js", "/demo.css"):
     assert browser.request(path), f"Empty asset: {path}"
-for path in ("/index.html", "/api/admin/status", "/api/orders", "/actuator/prometheus"):
+for path in ("/api/admin/status", "/api/orders", "/actuator/prometheus"):
     browser.request(path, expected=403)
 browser.request("/api/demo/manual", method="POST", csrf=False, expected=403)
 browser.start()

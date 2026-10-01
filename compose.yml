@@ -24,7 +24,6 @@ services:
     mem_limit: 128m
   kafka:
     image: apache/kafka:4.0.1
-    profiles: [events]
     environment:
       CLUSTER_ID: 4L6g3nShT-eMCtK--X86sw
       KAFKA_LOG_DIRS: /var/lib/kafka/data
@@ -60,7 +59,7 @@ services:
       DATABASE_PASSWORD: ${DATABASE_PASSWORD:-local-development-only}
       REDIS_HOST: redis
       CACHE_ENABLED: "true"
-      EVENTS_ENABLED: ${EVENTS_ENABLED:-false}
+      EVENTS_ENABLED: "true"
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       ALICE_PASSWORD: ${ALICE_PASSWORD:-demo-alice-password}
       BOB_PASSWORD: ${BOB_PASSWORD:-demo-bob-password}
@@ -68,6 +67,7 @@ services:
     depends_on:
       postgres: {condition: service_healthy}
       redis: {condition: service_healthy}
+      kafka: {condition: service_healthy}
     mem_limit: 768m
 volumes:
   postgres-data:

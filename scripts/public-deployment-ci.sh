@@ -6,7 +6,7 @@ cd "$(dirname "$0")/.."
 
 tested_image=$(docker compose images -q app)
 docker tag "$tested_image" inventory-public-ci:tested
-docker compose -f compose.yml -f compose.events.yml --profile events down -v
+docker compose down -v
 bash deploy/init-env.sh inventory.test
 export APP_IMAGE=inventory-public-ci:tested
 app=(docker compose --env-file deploy/.env.production -f deploy/compose.yml)
