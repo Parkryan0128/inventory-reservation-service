@@ -61,3 +61,10 @@ python3 scripts/contention.py --requests 120 --stock 25 --workers 16
 ```
 
 Tests cover concurrent stock updates, retries, order transitions, PostgreSQL constraints, Kafka delivery, Redis outages, access control, and the demo UI. GitHub Actions runs these checks on each push.
+
+## Contact
+
+- **Name:** Ryan Park
+- **Email:** [parkryan0128@gmail.com](mailto:parkryan0128@gmail.com)
+- **LinkedIn:** [linkedin.com/in/parkryan0128](https://www.linkedin.com/in/parkryan0128)
+- **GitHub:** [github.com/Parkryan0128](https://github.com/Parkryan0128)
