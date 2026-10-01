@@ -15,7 +15,7 @@ import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
 @Service
-@Profile("demo")
+@Profile({"demo", "public-demo"})
 public class ManualActivityLog {
   private final Clock clock;
   private final String streamId = UUID.randomUUID().toString();

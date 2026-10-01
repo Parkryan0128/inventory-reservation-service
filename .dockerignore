@@ -1,5 +1,8 @@
 .git
 target
 .env
+**/.env.production*
+deploy/.deployed-image
+deploy/.previous-image
 *.log
 *.zip

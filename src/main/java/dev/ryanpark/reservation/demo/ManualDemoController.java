@@ -7,7 +7,6 @@ import dev.ryanpark.reservation.demo.ManualDemoService.Workspace;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import jakarta.validation.Valid;
-import java.util.Set;
 import org.springframework.context.annotation.Profile;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -18,18 +17,20 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.util.WebUtils;
 
 @RestController
-@Profile("demo")
+@Profile({"demo", "public-demo"})
 public class ManualDemoController {
   private static final String WORKSPACE = ManualDemoController.class.getName() + ".workspace";
   private final ManualDemoService manual;
+  private final DemoAccess access;
 
-  public ManualDemoController(ManualDemoService manual) {
+  public ManualDemoController(ManualDemoService manual, DemoAccess access) {
     this.manual = manual;
+    this.access = access;
   }
 
   @PostMapping("/api/demo/manual")
   public State open(HttpServletRequest request) {
-    requireLocal(request);
+    access.requireHost(request);
     var session = request.getSession();
     synchronized (WebUtils.getSessionMutex(session)) {
       var workspace = (Workspace) session.getAttribute(WORKSPACE);
@@ -43,14 +44,14 @@ public class ManualDemoController {
 
   @GetMapping("/api/demo/manual")
   public State state(HttpServletRequest request) {
-    requireLocal(request);
+    access.requireHost(request);
     return manual.state(workspace(request.getSession(false)));
   }
 
   @PostMapping("/api/demo/manual/actions")
   public ResponseEntity<State> act(
       @Valid @RequestBody Command command, HttpServletRequest request) {
-    requireLocal(request);
+    access.requireHost(request);
     var outcome = manual.act(workspace(request.getSession(false)), command);
     var response = ResponseEntity.status(outcome.statusCode());
     if (outcome.statusCode() == 429) {
@@ -68,11 +69,5 @@ public class ManualDemoController {
           "Open manual mode to join the shared inventory");
     }
     return workspace;
-  }
-
-  private void requireLocal(HttpServletRequest request) {
-    if (!Set.of("localhost", "127.0.0.1", "::1", "[::1]").contains(request.getServerName())) {
-      throw new ApiException(HttpStatus.FORBIDDEN, "LOCAL_DEMO_ONLY", "Use localhost for the demo");
-    }
   }
 }

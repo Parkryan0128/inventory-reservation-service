@@ -5,7 +5,10 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      packages: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -34,12 +37,35 @@ jobs:
           npm ci
           npx playwright install --with-deps chromium
           npm run test:browser
+      - name: Public production stack over HTTPS
+        run: bash scripts/public-deployment-ci.sh
+      - name: Publish the tested image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          image="ghcr.io/${GITHUB_REPOSITORY,,}:sha-${GITHUB_SHA}"
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          docker tag inventory-public-ci:tested "$image"
+          docker push "$image"
+          docker logout ghcr.io
+          printf 'Published tested image: `%s`\n' "$image" >> "$GITHUB_STEP_SUMMARY"
       - name: Logs
         if: failure()
-        run: docker compose -f compose.yml -f compose.events.yml --profile events logs --no-color
+        run: |
+          docker compose -f compose.yml -f compose.events.yml --profile events logs --no-color
+          if [ -f deploy/.env.production ]; then
+            APP_IMAGE=inventory-public-ci:tested docker compose --env-file deploy/.env.production -f deploy/compose.yml logs --no-color
+          fi
+          docker logs inventory-proxy-ci 2>/dev/null || true
       - name: Stop services
         if: always()
-        run: docker compose -f compose.yml -f compose.events.yml --profile events down -v
+        run: |
+          docker compose -f compose.yml -f compose.events.yml --profile events down -v
+          docker rm -fv inventory-proxy-ci 2>/dev/null || true
+          if [ -f deploy/.env.production ]; then
+            APP_IMAGE=inventory-public-ci:tested docker compose --env-file deploy/.env.production -f deploy/compose.yml down -v
+          fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:

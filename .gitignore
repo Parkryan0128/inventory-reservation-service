@@ -3,6 +3,10 @@ target/
 .vscode/
 *.iml
 .env
+.env.production*
+deploy/.deployed-image
+deploy/.previous-image
+deploy/proxy/sites/*.local.caddy
 *.log
 .DS_Store
 data/

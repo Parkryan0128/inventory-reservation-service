@@ -10,7 +10,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 
 @Service
-@Profile("demo")
+@Profile({"demo", "public-demo"})
 public class SharedDemoProduct {
   public static final String SKU = "MANUAL-SHARED";
   private final CatalogService catalog;

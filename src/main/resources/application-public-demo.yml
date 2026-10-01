@@ -1,0 +1,22 @@
+# Public demo endpoints only; normal customer/admin APIs are denied by PublicDemoSecurity.
+spring:
+  datasource:
+    password: ${DATABASE_PASSWORD}
+server:
+  forward-headers-strategy: native
+  servlet:
+    session:
+      cookie:
+        secure: true
+  tomcat:
+    threads:
+      max: 40
+      min-spare: 4
+    accept-count: 64
+    max-connections: 512
+app:
+  demo:
+    public: true
+    allowed-hosts: ${DEMO_HOST}
+    scenario-interval: PT10S
+  reservation-ttl: ${RESERVATION_TTL:PT2M}

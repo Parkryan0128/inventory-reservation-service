@@ -1,0 +1,7 @@
+{$DEMO_HOST} {
+    request_body {
+        max_size 16KB
+    }
+    encode zstd gzip
+    reverse_proxy inventory-app:8080
+}

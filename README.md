@@ -52,7 +52,9 @@ The default scenario submits 100 reservation service calls through 16 server wor
 
 The server records each completed service call. The browser replays those records progressively, with pause/resume, speed, filtering and replay controls. Log order is server observation order, not a reconstructed commit order. This is not a live HTTP/SQL log or a benchmark of 100 simultaneous browser connections. During reservation playback, derived inventory counts are explicitly labelled and reconciled with the recorded database snapshots. The expiry fixture advances only its generated order's deadline to avoid waiting two minutes.
 
-The demo is bound to localhost and enabled only under the `demo` profile. Do not expose this profile publicly. Configuration overrides are in [.env.example](.env.example); detailed behavior and test setup are in the [dashboard guide](docs/demo.md).
+The local Compose setup uses the localhost-only `demo` profile. Do not expose this profile publicly. Configuration overrides are in [.env.example](.env.example); detailed behavior and test setup are in the [dashboard guide](docs/demo.md).
+
+For a public portfolio deployment, use the separate `public-demo` profile and the [VPS deployment guide](docs/deployment.md). It exposes the demo without opening the normal customer/admin APIs, preserves CSRF and session ownership, and serves HTTPS through Caddy. GitHub Actions publishes a commit-tagged image only after both local and public deployment checks pass; the VPS pulls that tested image.
 
 The original [manual API workspace](http://127.0.0.1:8080/index.html) remains available for account/ownership testing:
 

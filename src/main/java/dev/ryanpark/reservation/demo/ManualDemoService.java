@@ -23,7 +23,7 @@ import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 
 @Service
-@Profile("demo")
+@Profile({"demo", "public-demo"})
 public class ManualDemoService {
   private final CatalogService catalog;
   private final OrderService orders;

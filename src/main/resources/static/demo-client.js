@@ -188,7 +188,7 @@ export class DemoClient {
     try { body = await response.json(); }
     catch { throw new Error(`The server returned an unreadable response (HTTP ${response.status}).`); }
     if (!response.ok) throw new Error(response.status === 409 ? "Another demo is running. Try again shortly."
-      : response.status === 403 ? "The request was blocked. Refresh this localhost page and retry."
+      : response.status === 403 ? "The request was blocked. Refresh this page and retry."
         : body?.detail || body?.message || `Request failed (HTTP ${response.status}).`);
     return body;
   }

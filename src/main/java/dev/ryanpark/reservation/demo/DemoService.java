@@ -29,7 +29,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 @Service
-@Profile("demo")
+@Profile({"demo", "public-demo"})
 public class DemoService {
   public static final List<String> SCENARIOS =
       List.of("contention", "idempotency", "lifecycle", "race", "expiry");

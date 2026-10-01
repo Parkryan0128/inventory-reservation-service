@@ -8,7 +8,7 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.web.SecurityFilterChain;
 
 @Configuration
-@Profile("demo")
+@Profile("demo & !public-demo")
 public class DemoSecurity {
   @Bean
   @Order(1)
