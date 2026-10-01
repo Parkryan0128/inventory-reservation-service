@@ -46,27 +46,6 @@ docker compose up --build -d
 
 Open [localhost:8080](http://localhost:8080/). This starts the application, PostgreSQL, Redis, and Kafka. Local overrides are in [.env.example](.env.example).
 
-## API
-
-The local API uses HTTP Basic authentication with `alice`, `bob`, and `admin`; default passwords are in `.env.example`. Writes also require the session cookie and CSRF header returned by `GET /api/csrf`. Customers can access only their own orders.
-
-| Endpoint | Purpose |
-| --- | --- |
-| `GET /api/me` | Current account and roles |
-| `GET /api/products`, `GET /api/products/{id}` | Products and current stock |
-| `POST /api/products` | Create a product (admin) |
-| `GET /api/catalog/{id}` | Cached product metadata |
-| `POST /api/orders` | Reserve stock; requires `Idempotency-Key` |
-| `GET /api/orders`, `GET /api/orders/{id}` | View orders |
-| `POST /api/orders/{id}/cancel` | Cancel a reservation |
-| `POST /api/admin/payments/{id}` | Simulate payment with `{"success":true}` or `false` |
-| `GET /api/admin/orders`, `GET /api/admin/status` | Orders and event delivery status (admin) |
-| `GET /actuator/health`, `GET /actuator/prometheus` | Health and metrics; metrics require admin |
-
-Reserve with `{"productId":"<uuid>","quantity":2}`. Matching retries return the same order ID and its current status. Quantities and prices are integers; prices use cents. Errors return HTTP status codes and a JSON `code`, such as `INSUFFICIENT_STOCK` or `IDEMPOTENCY_CONFLICT`.
-
-The public deployment exposes only the demo and health endpoint. Its writes require CSRF protection and the configured hostname; normal customer/admin APIs are closed.
-
 ## Tests
 
 Requires Java 21, Node.js 22+, and Docker. The browser and HTTP checks use the running local stack.
@@ -81,28 +60,4 @@ python3 scripts/smoke.py --require-events
 python3 scripts/contention.py --requests 120 --stock 25 --workers 16
 ```
 
-Tests cover concurrent stock updates, retries, order transitions, PostgreSQL constraints, Kafka delivery, Redis outages, access control, and the demo UI. CI runs these checks and the production stack over HTTPS before publishing an image.
-
-## Deploy
-
-The VPS uses Docker Compose and Caddy for HTTPS. Point the hostname to the VPS and allow ports 80/443. After the commit's CI build succeeds, run in the server checkout:
-
-```bash
-bash deploy/init-env.sh inventory.example.com
-bash deploy/up.sh
-```
-
-Credentials are generated in the Git-ignored `deploy/.env.production`. Images come from GHCR; no build runs on the VPS. Named volumes preserve database and Kafka data, so do not remove them to update the app.
-
-Automatic deployment uses `deploy/install-cd-keys.sh` from `~/apps/inventory-reservation-service` as `ubuntu`. Configure GitHub secrets `DEPLOY_SSH_KEY` and `DEPLOY_KNOWN_HOSTS`, plus variables `DEPLOY_HOST`, `DEPLOY_USER`, and `DEPLOY_ENABLED=true`. Each main push must pass CI before the Deploy workflow updates the VPS.
-
-The Caddy proxy is shared with OptiRoute through `portfolio-edge`. Its additional site configuration lives in Git-ignored `deploy/proxy/sites/*.local.caddy`. Deployment scripts serialize updates with a shared lock.
-
-Manual update and rollback:
-
-```bash
-git pull --ff-only origin main
-bash deploy/up.sh
-# Restore the previous image if it supports the current database schema:
-bash deploy/up.sh "$(cat deploy/.previous-image)"
-```
+Tests cover concurrent stock updates, retries, order transitions, PostgreSQL constraints, Kafka delivery, Redis outages, access control, and the demo UI. GitHub Actions runs these checks on each push.
