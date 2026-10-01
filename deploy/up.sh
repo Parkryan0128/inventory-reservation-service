@@ -7,6 +7,11 @@ if [[ ! -f deploy/.env.production ]]; then
   exit 1
 fi
 export APP_IMAGE=${1:-ghcr.io/parkryan0128/inventory-reservation-service:sha-$(git rev-parse HEAD)}
+if [[ "${PORTFOLIO_DEPLOY_LOCKED:-0}" != 1 ]]; then
+  mkdir -p "$HOME/.cache"
+  exec 9>"$HOME/.cache/portfolio-deploy.lock"
+  flock -w 600 9
+fi
 if [[ ! "$APP_IMAGE" =~ ^ghcr.io/parkryan0128/inventory-reservation-service(:sha-[a-f0-9]{40}|@sha256:[a-f0-9]{64})$ ]]; then
   echo 'Use a published commit image or image digest from this repository.' >&2
   exit 1

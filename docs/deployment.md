@@ -9,7 +9,7 @@ The local `compose.yml` and `demo` profile remain local development tools. Use t
 Prerequisites: Linux amd64 VPS, Docker Engine with Compose, Git, OpenSSL, and curl. Point the demo hostname's A record to the VPS. TCP ports 80 and 443 must be reachable for HTTPS; SSH must remain reachable. Do not publish the PostgreSQL, Redis, Kafka, or application ports. This setup uses one application instance.
 
 1. Wait for the main branch's **Acceptance** workflow to finish successfully. The workflow tests the normal API/demo, then the production Compose stack over HTTPS using a private CI certificate authority. It publishes the exact tested image as `ghcr.io/parkryan0128/inventory-reservation-service:sha-<full-commit>`.
-2. For the first publication, open the GitHub container package's **Package settings → Change visibility → Public**. A public repository does not automatically make its container package public. Public images can be pulled anonymously; the VPS does not need a GitHub token. The package should remain associated with this public repository.
+2. Check the GitHub container package visibility. If it is private, use **Package settings → Change visibility → Public**. Public images can be pulled anonymously; the VPS does not need a GitHub token. The package should remain associated with this public repository.
 3. In the VPS checkout, run:
 
    ```bash
@@ -85,4 +85,18 @@ Do not start another proxy on the same host ports. Retain the existing project's
 
 ## Scope of automation
 
-Main pushes run tests and publish images. VM deployment is currently the explicit `deploy/up.sh` step. Fully automatic CD over SSH can use this same script once a dedicated deployment SSH key and host-key verification have been configured; no private SSH key is stored in the repository.
+Main pushes run tests and publish images. The **Deploy** workflow then updates the VPS when repository variable `DEPLOY_ENABLED=true`. Pull requests do not deploy. A manual Deploy run also requires a successful main Acceptance run for that exact commit; it reuses the published image without rebuilding.
+
+Install the two repository-specific public deployment keys once, as `ubuntu` on the VPS:
+
+```bash
+cd ~/apps/inventory-reservation-service
+git pull --ff-only origin main
+bash deploy/install-cd-keys.sh
+```
+
+The installer adds keys without removing existing SSH access and adds `ubuntu` to the Docker group so fresh deployment SSH sessions need no interactive sudo password. Each key is restricted to deploying one repository; it cannot open an interactive shell or forward ports. The corresponding private keys are GitHub Secrets, never repository files.
+
+GitHub Secrets: `DEPLOY_SSH_KEY`, `DEPLOY_KNOWN_HOSTS` (the verified VPS host key). Repository variables: `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_ENABLED`. Activate each repository only after its initial application setup and key installation have succeeded.
+
+`deploy/receive.sh` accepts only a full commit SHA, requires a clean main checkout, fetches the remote and skips superseded releases. It only fast-forwards; it will not reset local work. A shared VM file lock serializes both projects' deployments and Caddy reloads. Failed startup/HTTPS checks fail the workflow; inspect the logs and use the documented compatible-image rollback if needed.
