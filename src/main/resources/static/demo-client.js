@@ -157,13 +157,26 @@ export class Replay {
   }
 }
 
+async function requestJson(client, path, options, timeoutMs) {
+  const response = await client.fetcher(path, { credentials: "same-origin", cache: "no-store", signal: AbortSignal.timeout(timeoutMs), ...options });
+  let body;
+  try { body = await response.json(); }
+  catch { throw new Error(`The server returned an unreadable response (HTTP ${response.status}).`); }
+  return { response, body };
+}
+
+async function csrfHeaders(client) {
+  const csrf = await client.request("/api/csrf");
+  if (!csrf || typeof csrf.headerName !== "string" || !csrf.headerName || typeof csrf.token !== "string" || !csrf.token) {
+    throw new Error("Unable to obtain a CSRF token. Refresh the page.");
+  }
+  return { [csrf.headerName]: csrf.token };
+}
+
 export class DemoClient {
   constructor(fetcher = globalThis.fetch.bind(globalThis)) { this.fetcher = fetcher; this.running = false; }
   async request(path, options = {}) {
-    const response = await this.fetcher(path, { credentials: "same-origin", cache: "no-store", signal: AbortSignal.timeout(120000), ...options });
-    let body;
-    try { body = await response.json(); }
-    catch { throw new Error(`The server returned an unreadable response (HTTP ${response.status}).`); }
+    const { response, body } = await requestJson(this, path, options, 120000);
     if (!response.ok) throw new Error(response.status === 409 ? "Another demo is running. Try again shortly."
       : response.status === 403 ? "The request was blocked. Refresh this page and retry."
         : body?.detail || body?.message || `Request failed (HTTP ${response.status}).`);
@@ -179,9 +192,8 @@ export class DemoClient {
       for (const name of selected) {
         onStart(name);
         try {
-          const csrf = await this.request("/api/csrf");
-          if (!csrf || typeof csrf.headerName !== "string" || !csrf.headerName || typeof csrf.token !== "string" || !csrf.token) throw new Error("Unable to obtain a CSRF token. Refresh the page.");
-          const result = validateActivity(await this.request(`/api/demo/run/${name}`, { method: "POST", headers: { [csrf.headerName]: csrf.token } }));
+          const headers = await csrfHeaders(this);
+          const result = validateActivity(await this.request(`/api/demo/run/${name}`, { method: "POST", headers }));
           if (result.scenario !== name) invalid();
           results.push(result);
           onResult(name, result, null);
@@ -234,10 +246,7 @@ export class ManualClient {
     this.productId = null;
   }
   async request(path, options = {}, allowRejection = false) {
-    const response = await this.fetcher(path, { credentials: "same-origin", cache: "no-store", signal: AbortSignal.timeout(30000), ...options });
-    let body;
-    try { body = await response.json(); }
-    catch { throw new Error(`The server returned an unreadable response (HTTP ${response.status}).`); }
+    const { response, body } = await requestJson(this, path, options, 30000);
     if (!response.ok && !(allowRejection && [400, 409, 429].includes(response.status) && Array.isArray(body?.activity))) {
       throw new Error(body?.detail || `Manual request failed (HTTP ${response.status}).`);
     }
@@ -261,13 +270,10 @@ export class ManualClient {
     if (this.running) throw new Error("A manual request is already running.");
     this.running = true;
     try {
-      const csrf = await this.csrfClient.request("/api/csrf");
-      if (!csrf || typeof csrf.headerName !== "string" || !csrf.headerName || typeof csrf.token !== "string" || !csrf.token) {
-        throw new Error("Unable to obtain a CSRF token. Refresh the page.");
-      }
+      const headers = await csrfHeaders(this.csrfClient);
       return await this.request(path, {
         method: "POST",
-        headers: { [csrf.headerName]: csrf.token, "Content-Type": "application/json" },
+        headers: { ...headers, "Content-Type": "application/json" },
         ...(payload ? { body: JSON.stringify(payload) } : {}),
       }, Boolean(payload));
     } finally { this.running = false; }

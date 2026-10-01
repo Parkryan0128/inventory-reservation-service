@@ -62,7 +62,7 @@ public class ManualDemoService {
 
   public State state(Workspace workspace) {
     synchronized (workspace) {
-      var snapshot = reads.execute(status -> snapshot(workspace, workspace.orderId));
+      var snapshot = readSnapshot(workspace);
       return view(workspace, snapshot, null);
     }
   }
@@ -76,7 +76,7 @@ public class ManualDemoService {
     }
     synchronized (workspace) {
       if (clock.instant().isBefore(workspace.nextActionAt)) {
-        var snapshot = reads.execute(status -> snapshot(workspace, workspace.orderId));
+        var snapshot = readSnapshot(workspace);
         return new Outcome(
             429,
             view(
@@ -93,38 +93,7 @@ public class ManualDemoService {
       int statusCode = 200;
       int quantity = command.quantity();
       try {
-        snapshot =
-            writes.execute(
-                status -> {
-                  UUID orderId = workspace.orderId;
-                  switch (command.action()) {
-                    case ADD_STOCK -> catalog.adjustStock(workspace.productId, command.quantity());
-                    case REMOVE_STOCK ->
-                        catalog.adjustStock(workspace.productId, -command.quantity());
-                    case BUY -> {
-                      if (orderId != null
-                          && orders.get(workspace.owner, orderId).status()
-                              == OrderStatus.RESERVED) {
-                        throw ApiException.conflict(
-                            "ACTIVE_RESERVATION", "Pay or cancel the current reservation first");
-                      }
-                      orderId =
-                          orders
-                              .reserve(
-                                  workspace.owner,
-                                  new ReserveRequest(workspace.productId, command.quantity()))
-                              .id();
-                    }
-                    case PAY, CANCEL -> {
-                      if (orderId == null) throw ApiException.invalid("Buy an item first");
-                      // The ID comes only from this workspace. Load it first under the service's
-                      // order lock so a concurrent expiry cannot leave a stale managed entity.
-                      if (command.action() == Action.PAY) orders.payment(orderId, true);
-                      else orders.cancel(workspace.owner, orderId);
-                    }
-                  }
-                  return snapshot(workspace, orderId);
-                });
+        snapshot = writes.execute(status -> execute(workspace, command));
         workspace.orderId = snapshot.order() == null ? null : snapshot.order().id();
         code =
             switch (command.action()) {
@@ -137,7 +106,7 @@ public class ManualDemoService {
         }
       } catch (ApiException rejected) {
         // Read only after the failed write transaction has rolled back.
-        snapshot = reads.execute(status -> snapshot(workspace, workspace.orderId));
+        snapshot = readSnapshot(workspace);
         code = rejected.code();
         message = rejected.getMessage();
         level = "rejected";
@@ -161,6 +130,38 @@ public class ManualDemoService {
       var result = new Result(code, level, message, (System.nanoTime() - started) / 1_000_000);
       return new Outcome(statusCode, view(workspace, snapshot, result));
     }
+  }
+
+  private Snapshot execute(Workspace workspace, Command command) {
+    UUID orderId = workspace.orderId;
+    switch (command.action()) {
+      case ADD_STOCK -> catalog.adjustStock(workspace.productId, command.quantity());
+      case REMOVE_STOCK -> catalog.adjustStock(workspace.productId, -command.quantity());
+      case BUY -> {
+        if (orderId != null
+            && orders.get(workspace.owner, orderId).status() == OrderStatus.RESERVED) {
+          throw ApiException.conflict(
+              "ACTIVE_RESERVATION", "Pay or cancel the current reservation first");
+        }
+        orderId =
+            orders
+                .reserve(
+                    workspace.owner, new ReserveRequest(workspace.productId, command.quantity()))
+                .id();
+      }
+      case PAY, CANCEL -> {
+        if (orderId == null) throw ApiException.invalid("Buy an item first");
+        // The ID comes only from this workspace. Load it first under the service's
+        // order lock so a concurrent expiry cannot leave a stale managed entity.
+        if (command.action() == Action.PAY) orders.payment(orderId, true);
+        else orders.cancel(workspace.owner, orderId);
+      }
+    }
+    return snapshot(workspace, orderId);
+  }
+
+  private Snapshot readSnapshot(Workspace workspace) {
+    return reads.execute(status -> snapshot(workspace, workspace.orderId));
   }
 
   private Snapshot snapshot(Workspace workspace, UUID orderId) {

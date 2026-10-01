@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ManualClient, validateManualState } from "../../main/resources/static/demo-client.js";
+import { DemoClient, ManualClient, validateManualState } from "../../main/resources/static/demo-client.js";
 
 const response = (body, status = 200) => ({ ok: status >= 200 && status < 300, status, json: async () => body });
 const csrf = () => response({ headerName: "X-CSRF-TOKEN", token: "test-token" });
@@ -156,4 +156,55 @@ test("shared stream metadata, event ordering and action results are validated", 
   const s = state(); s.result = null;
   const client = new ManualClient(async path => path === "/api/csrf" ? csrf() : response(s));
   await assert.rejects(client.act("BUY", 1), /invalid manual result/);
+});
+
+test("scenario and manual requests retain their own timeouts and request options", async t => {
+  const timeouts = [];
+  const calls = [];
+  t.mock.method(AbortSignal, "timeout", ms => {
+    timeouts.push(ms);
+    return new AbortController().signal;
+  });
+  const fetcher = async (path, options) => {
+    calls.push({ path, options });
+    return path === "/api/csrf" ? csrf() : response(state());
+  };
+  await new DemoClient(fetcher).status();
+  const manual = new ManualClient(fetcher);
+  await manual.open();
+  await manual.state();
+  assert.deepEqual(timeouts, [120000, 120000, 30000, 30000]);
+  for (const { options } of calls) {
+    assert.equal(options.credentials, "same-origin");
+    assert.equal(options.cache, "no-store");
+    assert.ok(options.signal instanceof AbortSignal);
+  }
+  assert.deepEqual(calls[2].options.headers, { "X-CSRF-TOKEN": "test-token", "Content-Type": "application/json" });
+  assert.equal(calls[2].options.method, "POST");
+  assert.equal(calls[2].options.body, undefined);
+});
+
+test("scenario and manual clients keep their distinct HTTP error messages", async () => {
+  for (const [status, body, demoMessage, manualMessage] of [
+    [403, { detail: "Access denied" }, "The request was blocked. Refresh this page and retry.", "Access denied"],
+    [409, { detail: "Inventory conflict" }, "Another demo is running. Try again shortly.", "Inventory conflict"],
+    [500, { message: "Backend failed" }, "Backend failed", "Manual request failed (HTTP 500)."],
+    [502, {}, "Request failed (HTTP 502).", "Manual request failed (HTTP 502)."],
+  ]) {
+    const fetcher = async () => response(body, status);
+    await assert.rejects(new DemoClient(fetcher).status(), { message: demoMessage });
+    await assert.rejects(new ManualClient(fetcher).state(), { message: manualMessage });
+  }
+});
+
+test("unreadable manual responses fail once and release the write guard", async () => {
+  let writes = 0;
+  const client = new ManualClient(async path => {
+    if (path === "/api/csrf") return csrf();
+    writes++;
+    return { status: 502, json: async () => { throw new SyntaxError("HTML response"); } };
+  });
+  await assert.rejects(client.act("BUY", 1), { message: "The server returned an unreadable response (HTTP 502)." });
+  assert.equal(writes, 1);
+  assert.equal(client.running, false);
 });
