@@ -1,5 +1,7 @@
 package dev.inventory.order;
 
+import static dev.inventory.inventory.InventoryLimits.MAX_QUANTITY;
+
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
@@ -9,7 +11,7 @@ import java.util.UUID;
 public final class OrderDtos {
   private OrderDtos() {}
 
-  public record ReserveRequest(@NotNull UUID productId, @Min(1) @Max(10_000) int quantity) {}
+  public record ReserveRequest(@NotNull UUID productId, @Min(1) @Max(MAX_QUANTITY) int quantity) {}
 
   public record PaymentRequest(@NotNull Boolean success) {}
 

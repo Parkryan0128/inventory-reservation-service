@@ -1,5 +1,7 @@
 package dev.inventory.inventory;
 
+import static dev.inventory.inventory.InventoryLimits.*;
+
 import dev.inventory.common.ApiException;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -12,10 +14,10 @@ import java.util.UUID;
 public class Product {
   @Id private UUID id;
 
-  @Column(nullable = false, unique = true, length = 64)
+  @Column(nullable = false, unique = true, length = MAX_SKU_LENGTH)
   private String sku;
 
-  @Column(nullable = false, length = 160)
+  @Column(nullable = false, length = MAX_NAME_LENGTH)
   private String name;
 
   private long priceCents;
@@ -41,7 +43,7 @@ public class Product {
   }
 
   public void reserve(int quantity) {
-    if (quantity < 1 || quantity > 10_000)
+    if (quantity < 1 || quantity > MAX_QUANTITY)
       throw ApiException.invalid("Quantity must be between 1 and 10000");
     if (available < quantity)
       throw ApiException.conflict("INSUFFICIENT_STOCK", "Not enough inventory");
@@ -62,11 +64,11 @@ public class Product {
   }
 
   public void adjustStock(int delta) {
-    if (delta == 0 || delta < -10_000 || delta > 10_000)
+    if (delta == 0 || delta < -MAX_QUANTITY || delta > MAX_QUANTITY)
       throw ApiException.invalid("Stock adjustment must be between 1 and 10000 units");
     if (delta < 0 && available < -delta)
       throw ApiException.conflict("INSUFFICIENT_STOCK", "Only available stock can be removed");
-    if ((long) initialStock + delta > 1_000_000)
+    if ((long) initialStock + delta > MAX_STOCK)
       throw ApiException.conflict("STOCK_LIMIT", "Total stock cannot exceed 1000000 units");
     available += delta;
     // The existing balance column is the stock baseline, including subsequent adjustments.

@@ -1,5 +1,7 @@
 package dev.inventory.events;
 
+import static dev.inventory.inventory.InventoryLimits.MAX_QUANTITY;
+
 import dev.inventory.order.OrderStatus;
 import java.time.Instant;
 import java.util.UUID;
@@ -21,7 +23,7 @@ public record OrderEvent(
         || occurredAt == null
         || status == null
         || quantity < 1
-        || quantity > 10_000
+        || quantity > MAX_QUANTITY
         || revision < 1) throw new IllegalArgumentException("Invalid order event");
   }
 }
