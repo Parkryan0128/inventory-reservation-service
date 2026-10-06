@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.*;
 
 import dev.inventory.common.ApiException;
 import dev.inventory.inventory.CatalogService;
-import dev.inventory.inventory.ProductDtos.CreateProduct;
 import dev.inventory.order.OrderDtos.ReserveRequest;
 import dev.inventory.order.OrderService;
 import dev.inventory.order.ReservationRepository;
@@ -26,15 +25,7 @@ class InventoryTest {
   @Autowired PlatformTransactionManager transactions;
 
   private UUID product(int stock) {
-    return catalog
-        .create(
-            new CreateProduct(
-                "SKU-" + UUID.randomUUID().toString().toUpperCase(Locale.ROOT),
-                "Test product",
-                1200,
-                "USD",
-                stock))
-        .id();
+    return TestProducts.create(catalog, stock).id();
   }
 
   @Test
