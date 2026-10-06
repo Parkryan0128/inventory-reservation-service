@@ -1,5 +1,6 @@
 package dev.inventory.order;
 
+import static dev.inventory.inventory.InventoryLimits.MAX_QUANTITY;
 import static dev.inventory.order.OrderDtos.OrderView;
 import static dev.inventory.order.OrderDtos.ReserveRequest;
 
@@ -78,7 +79,7 @@ public class OrderService {
     if (request == null
         || request.productId() == null
         || request.quantity() < 1
-        || request.quantity() > 10_000)
+        || request.quantity() > MAX_QUANTITY)
       throw ApiException.invalid("Product and quantity between 1 and 10000 are required");
   }
 

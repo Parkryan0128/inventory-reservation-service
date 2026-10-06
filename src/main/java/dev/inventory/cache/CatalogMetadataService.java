@@ -1,5 +1,7 @@
 package dev.inventory.cache;
 
+import static dev.inventory.inventory.InventoryLimits.*;
+
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.inventory.inventory.CatalogService;
@@ -19,12 +21,12 @@ public class CatalogMetadataService {
     boolean validFor(UUID productId) {
       return productId.equals(id)
           && sku != null
-          && sku.matches("[A-Z0-9_-]{1,64}")
+          && sku.matches(SKU_PATTERN)
           && name != null
           && !name.isBlank()
-          && name.length() <= 160
+          && name.length() <= MAX_NAME_LENGTH
           && priceCents >= 1
-          && priceCents <= 1_000_000_000
+          && priceCents <= MAX_PRICE_CENTS
           && ("USD".equals(currency) || "CAD".equals(currency));
     }
   }

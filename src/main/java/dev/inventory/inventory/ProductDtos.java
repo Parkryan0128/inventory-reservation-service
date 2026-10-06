@@ -1,5 +1,7 @@
 package dev.inventory.inventory;
 
+import static dev.inventory.inventory.InventoryLimits.*;
+
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -12,11 +14,11 @@ public final class ProductDtos {
   private ProductDtos() {}
 
   public record CreateProduct(
-      @NotBlank @Pattern(regexp = "[A-Z0-9_-]{1,64}") String sku,
-      @NotBlank @Size(max = 160) String name,
-      @Min(1) @Max(1_000_000_000) long priceCents,
-      @NotNull @Pattern(regexp = "USD|CAD") String currency,
-      @Min(0) @Max(1_000_000) int stock) {}
+      @NotBlank @Pattern(regexp = SKU_PATTERN) String sku,
+      @NotBlank @Size(max = MAX_NAME_LENGTH) String name,
+      @Min(1) @Max(MAX_PRICE_CENTS) long priceCents,
+      @NotNull @Pattern(regexp = CURRENCY_PATTERN) String currency,
+      @Min(0) @Max(MAX_STOCK) int stock) {}
 
   public record ProductView(
       UUID id,
