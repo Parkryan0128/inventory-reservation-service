@@ -23,14 +23,6 @@ public class ProcessedOrderEvent {
 
   protected ProcessedOrderEvent() {}
 
-  ProcessedOrderEvent(OrderEvent event, String payload, Instant now) {
-    this.id = event.eventId();
-    this.orderId = event.orderId();
-    this.eventType = event.status().name();
-    this.payload = payload;
-    this.receivedAt = now;
-  }
-
   public String payload() {
     return payload;
   }

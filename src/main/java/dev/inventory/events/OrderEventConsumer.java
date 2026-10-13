@@ -43,9 +43,9 @@ public class OrderEventConsumer {
               verifySame(existing.get().payload(), event);
               return;
             }
-            // This receipt is the demo consumer's durable side effect; commit it before
-            // acknowledging Kafka.
-            receipts.saveAndFlush(new ProcessedOrderEvent(event, payload, clock.instant()));
+            // Insert only: a concurrent receipt must trigger uniqueness recovery, never an update.
+            receipts.insertReceipt(
+                event.eventId(), event.orderId(), event.status().name(), payload, clock.instant());
           });
     } catch (DataIntegrityViolationException collision) {
       var existing = receipts.findById(event.eventId());

@@ -1,6 +1,9 @@
 package dev.inventory;
 
 import static org.assertj.core.api.Assertions.*;
+import static org.mockito.AdditionalAnswers.delegatesTo;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.mock;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -8,16 +11,21 @@ import dev.inventory.events.*;
 import dev.inventory.order.OrderStatus;
 import java.time.Duration;
 import java.util.UUID;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.*;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.transaction.PlatformTransactionManager;
 
 class EventConsumerBoundaryTest extends InventoryTestSupport {
   @Autowired OrderEventConsumer consumer;
   @Autowired ProcessedEventRepository receipts;
   @Autowired ObjectMapper json;
+  @Autowired PlatformTransactionManager transactions;
 
   OrderEvent event() {
     return new OrderEvent(
@@ -128,5 +136,51 @@ class EventConsumerBoundaryTest extends InventoryTestSupport {
     assertThat(receipts.findById(event.eventId()).orElseThrow().payload()).isEqualTo(original);
     consumer.accept(original);
     assertThat(receipts.count()).isEqualTo(1);
+  }
+
+  @ParameterizedTest
+  @ValueSource(booleans = {false, true})
+  void concurrentDuplicateCannotReplaceCommittedReceipt(boolean conflicting) throws Exception {
+    var event = event();
+    var original = json.writeValueAsString(event);
+    var incoming =
+        conflicting
+            ? original.replace("RESERVED", "CONFIRMED")
+            : json.writerWithDefaultPrettyPrinter().writeValueAsString(event);
+    var interleaved = mock(ProcessedEventRepository.class, delegatesTo(receipts));
+    var firstLookup = new AtomicBoolean(true);
+    try (var worker = Executors.newSingleThreadExecutor()) {
+      doAnswer(
+              invocation -> {
+                var found = receipts.findById(event.eventId());
+                if (firstLookup.getAndSet(false)) {
+                  assertThat(found).isEmpty();
+                  // Another transaction commits after our lookup but before our write.
+                  worker.submit(() -> consumer.accept(original)).get(10, TimeUnit.SECONDS);
+                  clock.advance(Duration.ofHours(1));
+                }
+                return found;
+              })
+          .when(interleaved)
+          .findById(event.eventId());
+      var competing = new OrderEventConsumer(interleaved, json, clock, transactions);
+      var failure = catchThrowable(() -> competing.accept(incoming));
+
+      assertThat(receipts.count()).isEqualTo(1);
+      assertThat(receipts.findById(event.eventId()).orElseThrow().payload()).isEqualTo(original);
+      assertThat(
+              jdbc.queryForObject(
+                  "SELECT received_at FROM processed_order_events WHERE id = ?",
+                  java.sql.Timestamp.class,
+                  event.eventId()))
+          .isEqualTo(java.sql.Timestamp.from(START));
+      if (conflicting) {
+        assertThat(failure)
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Event ID reused with different content");
+      } else {
+        assertThat(failure).isNull();
+      }
+    }
   }
 }
