@@ -9,7 +9,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import javax.sql.DataSource;
 import org.awaitility.Awaitility;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -22,12 +23,15 @@ class PostgresReservationBoundaryIT extends ReservationBoundaryTest {
     PostgresTestDatabase.configureIsolated(registry);
   }
 
-  @Test
-  void paymentRechecksExpiryAfterWaitingForProductLock() throws Exception {
+  @ParameterizedTest
+  @EnumSource(
+      value = OrderStatus.class,
+      names = {"CONFIRMED", "CANCELLED", "PAYMENT_FAILED"})
+  void completionRechecksExpiryAfterWaitingForProductLock(OrderStatus requested) throws Exception {
     var product = TestProducts.create(catalog, 1);
     var order = placement.place("alice", "lock-wait", new ReserveRequest(product.id(), 1));
     try (var workers = Executors.newSingleThreadExecutor()) {
-      java.util.concurrent.Future<dev.inventory.order.OrderDtos.OrderView> payment;
+      java.util.concurrent.Future<dev.inventory.order.OrderDtos.OrderView> completion;
       try (Connection locked = dataSource.getConnection()) {
         locked.setAutoCommit(false);
         try {
@@ -41,7 +45,12 @@ class PostgresReservationBoundaryIT extends ReservationBoundaryTest {
               blocker = rows.getInt(1);
             }
           }
-          payment = workers.submit(() -> service.payment(order.id(), true));
+          completion =
+              workers.submit(
+                  () ->
+                      requested == OrderStatus.CANCELLED
+                          ? service.cancel("alice", order.id())
+                          : service.payment(order.id(), requested == OrderStatus.CONFIRMED));
           Awaitility.await()
               .atMost(5, TimeUnit.SECONDS)
               .untilAsserted(
@@ -57,7 +66,7 @@ class PostgresReservationBoundaryIT extends ReservationBoundaryTest {
           locked.rollback();
         }
       }
-      assertThat(payment.get(10, TimeUnit.SECONDS).status()).isEqualTo(OrderStatus.EXPIRED);
+      assertThat(completion.get(10, TimeUnit.SECONDS).status()).isEqualTo(OrderStatus.EXPIRED);
     }
     assertThat(catalog.get(product.id()).available()).isEqualTo(1);
     assertThat(catalog.get(product.id()).sold()).isZero();
