@@ -12,9 +12,12 @@ import java.util.ArrayList;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 class OutboxRetryTest extends InventoryTestSupport {
   @Autowired OutboxRelay relay;
+  @Autowired PlatformTransactionManager transactions;
 
   private OutboxEvent event() {
     var product = TestProducts.create(catalog, 1);
@@ -72,6 +75,99 @@ class OutboxRetryTest extends InventoryTestSupport {
     assertThat(failed.publishedAt()).isNull();
     assertThat(failed.attempts()).isEqualTo(1);
     assertThat(failed.lastError()).isEqualTo("InterruptedException");
+  }
+
+  @Test
+  void rolledBackAcknowledgementRedeliversTheSameEventAndPayload() throws Exception {
+    var event = event();
+    new TransactionTemplate(transactions)
+        .executeWithoutResult(
+            transaction -> {
+              assertThat(relay.publish(event.id())).isTrue();
+              outbox.flush();
+              assertThat(outbox.findById(event.id()).orElseThrow().publishedAt())
+                  .isEqualTo(clock.instant());
+              transaction.setRollbackOnly();
+            });
+
+    var pending = outbox.findById(event.id()).orElseThrow();
+    assertThat(pending.publishedAt()).isNull();
+    assertThat(pending.attempts()).isZero();
+    assertThat(pending.nextAttemptAt()).isEqualTo(event.nextAttemptAt());
+    assertThat(pending.payload()).isEqualTo(event.payload());
+    verify(publisher).publish(event.orderId(), event.payload());
+
+    clock.advance(Duration.ofSeconds(1));
+    assertThat(relay.publish(event.id())).isTrue();
+    assertThat(relay.publish(event.id())).isFalse();
+    var published = outbox.findById(event.id()).orElseThrow();
+    assertThat(published.publishedAt()).isEqualTo(clock.instant());
+    assertThat(published.attempts()).isEqualTo(1);
+    assertThat(outbox.count()).isEqualTo(1);
+    verify(publisher, times(2)).publish(event.orderId(), event.payload());
+    verifyNoMoreInteractions(publisher);
+  }
+
+  @Test
+  void rolledBackFailureDoesNotPersistRetryMetadata() throws Exception {
+    var event = event();
+    doThrow(new IllegalStateException("broker unavailable"))
+        .when(publisher)
+        .publish(event.orderId(), event.payload());
+    new TransactionTemplate(transactions)
+        .executeWithoutResult(
+            transaction -> {
+              assertThat(relay.publish(event.id())).isFalse();
+              outbox.flush();
+              assertThat(outbox.findById(event.id()).orElseThrow().attempts()).isEqualTo(1);
+              transaction.setRollbackOnly();
+            });
+
+    var pending = outbox.findById(event.id()).orElseThrow();
+    assertThat(pending.attempts()).isZero();
+    assertThat(pending.lastError()).isNull();
+    assertThat(pending.nextAttemptAt()).isEqualTo(event.nextAttemptAt());
+    assertThat(pending.publishedAt()).isNull();
+    doNothing().when(publisher).publish(event.orderId(), event.payload());
+    assertThat(relay.publish(event.id())).isTrue();
+    assertThat(outbox.findById(event.id()).orElseThrow().attempts()).isEqualTo(1);
+    verify(publisher, times(2)).publish(event.orderId(), event.payload());
+  }
+
+  @Test
+  void failedEventDoesNotBlockLaterEventsOrRepublishSuccessfulOnes() throws Exception {
+    var failed = event();
+    clock.advance(Duration.ofSeconds(1));
+    var healthy = event();
+    doThrow(new IllegalStateException("broker unavailable"))
+        .when(publisher)
+        .publish(failed.orderId(), failed.payload());
+    var poller = new OutboxPoller(outbox, relay, clock);
+
+    poller.poll();
+    var retry = outbox.findById(failed.id()).orElseThrow();
+    assertThat(retry.publishedAt()).isNull();
+    assertThat(retry.attempts()).isEqualTo(1);
+    assertThat(retry.nextAttemptAt()).isEqualTo(clock.instant().plusSeconds(2));
+    var published = outbox.findById(healthy.id()).orElseThrow();
+    assertThat(published.publishedAt()).isEqualTo(clock.instant());
+    assertThat(published.attempts()).isEqualTo(1);
+
+    poller.poll();
+    verify(publisher).publish(failed.orderId(), failed.payload());
+    verify(publisher).publish(healthy.orderId(), healthy.payload());
+    doNothing().when(publisher).publish(failed.orderId(), failed.payload());
+    clock.set(retry.nextAttemptAt());
+    poller.poll();
+
+    var recovered = outbox.findById(failed.id()).orElseThrow();
+    assertThat(recovered.publishedAt()).isEqualTo(clock.instant());
+    assertThat(recovered.attempts()).isEqualTo(2);
+    assertThat(recovered.lastError()).isNull();
+    assertThat(outbox.findById(healthy.id()).orElseThrow().publishedAt())
+        .isEqualTo(published.publishedAt());
+    verify(publisher, times(2)).publish(failed.orderId(), failed.payload());
+    verifyNoMoreInteractions(publisher);
   }
 
   @Test

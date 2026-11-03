@@ -33,6 +33,37 @@ class ReservationBoundaryTest extends InventoryTestSupport {
         .containsExactly("RESERVED", expected.name());
   }
 
+  @ParameterizedTest
+  @CsvSource({
+    "CANCELLED, -1, CANCELLED",
+    "CANCELLED, 0, EXPIRED",
+    "CANCELLED, 1, EXPIRED",
+    "PAYMENT_FAILED, -1, PAYMENT_FAILED",
+    "PAYMENT_FAILED, 0, EXPIRED",
+    "PAYMENT_FAILED, 1, EXPIRED"
+  })
+  void stockReleaseTransitionsCheckTheExactExpiryInstant(
+      OrderStatus requested, long offsetMillis, OrderStatus expected) {
+    var product = TestProducts.create(catalog, 3);
+    var order = placement.place("alice", "release-deadline", new ReserveRequest(product.id(), 2));
+    clock.set(order.expiresAt().plusMillis(offsetMillis));
+
+    var completed =
+        requested == OrderStatus.CANCELLED
+            ? service.cancel("alice", order.id())
+            : service.payment(order.id(), false);
+
+    assertThat(completed.status()).isEqualTo(expected);
+    assertThat(completed.createdAt()).isEqualTo(order.createdAt());
+    assertThat(completed.expiresAt()).isEqualTo(order.expiresAt());
+    assertThat(catalog.get(product.id())).isEqualTo(product);
+    assertThat(orders.findById(order.id()).orElseThrow().revision()).isEqualTo(2);
+    assertThat(outbox.findByOrderIdOrderByRevisionAsc(order.id()))
+        .extracting(OutboxEvent::eventType, OutboxEvent::revision)
+        .containsExactly(tuple("RESERVED", 1), tuple(expected.name(), 2));
+    assertThat(service.expire(order.id())).isFalse();
+  }
+
   @Test
   void expiryDoesNothingBeforeDeadlineAndReleasesStockOnceAtDeadline() {
     var product = TestProducts.create(catalog, 2);
