@@ -7,6 +7,7 @@ import static dev.inventory.order.OrderDtos.ReserveRequest;
 import dev.inventory.common.ApiException;
 import dev.inventory.events.OrderChanged;
 import dev.inventory.events.OutboxRecorder;
+import dev.inventory.inventory.Product;
 import dev.inventory.inventory.ProductDtos.ProductView;
 import dev.inventory.inventory.ProductRepository;
 import java.time.Clock;
@@ -66,9 +67,7 @@ public class OrderService {
     var order =
         orders.saveAndFlush(
             new Reservation(owner, key, product, request.quantity(), now, now.plus(ttl)));
-    events.record(order);
-    notifications.publishEvent(new OrderChanged(ProductView.from(product), OrderView.from(order)));
-    return OrderView.from(order);
+    return recordChange(order, product);
   }
 
   static void validate(String owner, String key, ReserveRequest request) {
@@ -147,8 +146,13 @@ public class OrderService {
     if (target == OrderStatus.CONFIRMED) product.confirm(order.quantity());
     else product.release(order.quantity());
     order.transitionTo(target);
+    return recordChange(order, product);
+  }
+
+  private OrderView recordChange(Reservation order, Product product) {
     events.record(order);
-    notifications.publishEvent(new OrderChanged(ProductView.from(product), OrderView.from(order)));
-    return OrderView.from(order);
+    var view = OrderView.from(order);
+    notifications.publishEvent(new OrderChanged(ProductView.from(product), view));
+    return view;
   }
 }
