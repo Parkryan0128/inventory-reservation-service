@@ -27,14 +27,7 @@ public class OrderEventConsumer {
   }
 
   public void accept(String payload) {
-    final OrderEvent event;
-    try {
-      event = mapper.readValue(payload, OrderEvent.class);
-    } catch (JsonProcessingException e) {
-      throw new IllegalArgumentException("Invalid order event JSON", e);
-    }
-    if (event == null) throw new IllegalArgumentException("Missing order event");
-    event.validate();
+    var event = parse(payload);
     try {
       transaction.executeWithoutResult(
           status -> {
@@ -52,6 +45,18 @@ public class OrderEventConsumer {
       if (existing.isEmpty()) throw collision;
       verifySame(existing.get().payload(), event);
     }
+  }
+
+  private OrderEvent parse(String payload) {
+    final OrderEvent event;
+    try {
+      event = mapper.readValue(payload, OrderEvent.class);
+    } catch (JsonProcessingException e) {
+      throw new IllegalArgumentException("Invalid order event JSON", e);
+    }
+    if (event == null) throw new IllegalArgumentException("Missing order event");
+    event.validate();
+    return event;
   }
 
   private void verifySame(String stored, OrderEvent incoming) {
