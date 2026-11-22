@@ -19,7 +19,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.*;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 class EventConsumerBoundaryTest extends InventoryTestSupport {
   @Autowired OrderEventConsumer consumer;
@@ -114,6 +116,75 @@ class EventConsumerBoundaryTest extends InventoryTestSupport {
                 java.sql.Timestamp.class,
                 event.eventId()))
         .isEqualTo(received);
+  }
+
+  @Test
+  void rolledBackReceiptCanBeDeliveredAgain() throws Exception {
+    var event = event();
+    var payload = json.writeValueAsString(event);
+    new TransactionTemplate(transactions)
+        .executeWithoutResult(
+            transaction -> {
+              consumer.accept(payload);
+              assertThat(receipts.findById(event.eventId()).orElseThrow().payload())
+                  .isEqualTo(payload);
+              transaction.setRollbackOnly();
+            });
+
+    assertThat(receipts.count()).isZero();
+    clock.advance(Duration.ofSeconds(5));
+    consumer.accept(payload);
+
+    assertThat(receipts.count()).isEqualTo(1);
+    assertThat(receipts.findById(event.eventId()).orElseThrow().payload()).isEqualTo(payload);
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT received_at FROM processed_order_events WHERE id = ?",
+                java.sql.Timestamp.class,
+                event.eventId()))
+        .isEqualTo(java.sql.Timestamp.from(clock.instant()));
+  }
+
+  @Test
+  void unrelatedConstraintFailureIsPropagatedAndDeliveryCanBeRetried() throws Exception {
+    var event = event();
+    var payload = json.writeValueAsString(event);
+    jdbc.execute(
+        "ALTER TABLE processed_order_events ADD CONSTRAINT reject_reserved_receipt"
+            + " CHECK (event_type <> 'RESERVED')");
+    try {
+      assertThatThrownBy(() -> consumer.accept(payload))
+          .isInstanceOf(DataIntegrityViolationException.class);
+      assertThat(receipts.count()).isZero();
+    } finally {
+      jdbc.execute("ALTER TABLE processed_order_events DROP CONSTRAINT reject_reserved_receipt");
+    }
+
+    consumer.accept(payload);
+    assertThat(receipts.count()).isEqualTo(1);
+    assertThat(receipts.findById(event.eventId()).orElseThrow().payload()).isEqualTo(payload);
+  }
+
+  @Test
+  void unreadableStoredReceiptIsReportedWithoutReplacingIt() throws Exception {
+    var event = event();
+    var payload = json.writeValueAsString(event);
+    consumer.accept(payload);
+    jdbc.update("UPDATE processed_order_events SET payload = ? WHERE id = ?", "{", event.eventId());
+    clock.advance(Duration.ofHours(1));
+
+    assertThatThrownBy(() -> consumer.accept(payload))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessage("Corrupted event receipt")
+        .hasCauseInstanceOf(com.fasterxml.jackson.core.JsonProcessingException.class);
+    assertThat(receipts.count()).isEqualTo(1);
+    assertThat(receipts.findById(event.eventId()).orElseThrow().payload()).isEqualTo("{");
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT received_at FROM processed_order_events WHERE id = ?",
+                java.sql.Timestamp.class,
+                event.eventId()))
+        .isEqualTo(java.sql.Timestamp.from(START));
   }
 
   @ParameterizedTest
